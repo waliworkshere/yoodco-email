@@ -11,8 +11,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="auth">
       <div className="card">
         <div className="brand">
-          <span className="brand-mark"><img src="/logo.png" alt="Yood" /></span>
-          <span>Yoodco Email<small>Outbound sequences</small></span>
+          <img src="/logo.png" alt="" />
+          <span>Yood<small>Outreach</small></span>
+        </div>
+        <div>
+          <h1 style={{ fontSize: 22 }}>Welcome back</h1>
+          <p className="muted small" style={{ marginTop: 4 }}>Sign in to manage your outreach.</p>
         </div>
         <LoginForm next={next ?? "/"} />
       </div>

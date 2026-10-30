@@ -34,6 +34,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     db.message.count({ where: { mode: "TEST" } }),
     db.message.count({ where: { mode: "LIVE" } }),
   ]);
+  const liveRunning = await db.campaign.count({ where: { status: "RUNNING", mode: "LIVE" } });
 
   const progress = await Promise.all(
     campaigns.map((c) => db.campaignContact.count({ where: { campaignId: c.id, status: { notIn: ["QUEUED", "ACTIVE"] } } })),
@@ -50,19 +51,25 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <div className="page-head">
-        <div className="title">
-          <h1>Overview</h1>
-          <p className="muted">Live sending over the last 7 days. Test runs are excluded.</p>
-        </div>
+      <section className="hero">
+        <span className="eyebrow">Outreach overview</span>
+        <h1 style={{ marginTop: 10 }}>
+          {funnel.sent > 0 ? (
+            <><b>{fmtNum(funnel.sent)} emails</b> sent this week, <b>{fmtNum(funnel.replied)} replies</b> so far.</>
+          ) : (
+            <>Paced outreach from <b>your own mailboxes</b>, without landing in spam.</>
+          )}
+        </h1>
+        <p>Live sending over the last 7 days. Test runs are kept separate.</p>
         <div className="actions">
-          <Link className="btn btn-primary" href="/campaigns/new"><IconPlus /> New campaign</Link>
+          <Link className="btn btn-primary btn-lg" href="/campaigns/new"><IconPlus /> New campaign</Link>
+          <Link className="btn btn-lg" href="/campaigns">View campaigns</Link>
         </div>
-      </div>
+      </section>
       <Flash sp={sp} />
 
-      {worker.state !== "online" ? (
-        <Notice tone="warn" title={worker.state === "never" ? "The background sender has not started yet" : "The background sender is offline"}>
+      {worker.state !== "online" && liveRunning > 0 ? (
+        <Notice tone="warn" title="A live campaign is waiting for the sender">
           Test campaigns run while their page is open. Live campaigns need the sender: <code>npm run worker</code> on a server, or a scheduler calling <code>/api/cron/tick</code> every minute (see docs/DEPLOY_VERCEL.md).
         </Notice>
       ) : null}

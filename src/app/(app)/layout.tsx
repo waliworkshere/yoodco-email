@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { workerStatus } from "@/lib/stats";
 import { Nav } from "@/components/Nav";
@@ -10,24 +11,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser();
   const worker = await workerStatus();
   const workerLabel =
-    worker.state === "online" ? "Sender running" : worker.state === "offline" ? `Sender offline · ${fmtRelative(worker.hb?.lastBeat)}` : "Sender not started";
+    worker.state === "online" ? "Sender running" : worker.state === "offline" ? `Sender idle · ${fmtRelative(worker.hb?.lastBeat)}` : "Sender not started";
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark"><img src="/logo.png" alt="Yood" /></span>
-          <span>Yoodco Email<small>Outbound sequences</small></span>
+    <>
+      <header className="topbar">
+        <div className="topbar-in">
+          <Link className="brand" href="/">
+            <img src="/logo.png" alt="" />
+            <span>Yood<small>Outreach</small></span>
+          </Link>
+          <Nav />
+          <div className="top-right">
+            <span className={`live-dot ${worker.state}`} title="The sender that paces and sends emails">{workerLabel}</span>
+            <span className="who">{user.name}</span>
+            <form action={logout}><button className="linkish" type="submit">Sign out</button></form>
+          </div>
         </div>
-        <Nav />
-        <div className="side-foot">
-          <span className={`worker-dot ${worker.state}`} title="The background sender that paces and sends emails">{workerLabel}</span>
-          <span className="who">{user.name} · {user.email}</span>
-          <form action={logout}><button type="submit">Sign out</button></form>
-        </div>
-      </aside>
+      </header>
       <main className="main">
         <div className="container">{children}</div>
       </main>
-    </div>
+      <footer className="footer">
+        <div className="footer-in">
+          <span>Yood Outreach · paced sequences from your own mailboxes</span>
+          <span>Signed in as {user.email}</span>
+        </div>
+      </footer>
+    </>
   );
 }
