@@ -1,0 +1,303 @@
+// Yoodco Email — data model
+//
+// Mailbox          a connected sending account (Google, Microsoft 365, SMTP, or Sandbox)
+// Campaign         a sequence (Email 1 → 2 → 3) with its pacing rules and mode (TEST / LIVE)
+// CampaignStep     one email in the sequence and its delay after the previous one
+// Contact          a person, shared across campaigns; holds the global suppression flags
+// CampaignContact  one contact enrolled in one campaign: assigned sender, progress, next due time
+// Message          every email the system sent (rendered copy kept for audit and the test inbox)
+// Event            open / click / reply / bounce / unsubscribe / failure timeline
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+}
+
+enum MailboxProvider {
+  GOOGLE        // Gmail / Google Workspace, connected with the user's own Google sign-in (OAuth)
+  GOOGLE_DWD    // Google Workspace, connected by an admin through a service account (domain-wide delegation)
+  MICROSOFT     // Microsoft 365 / Outlook, connected with OAuth
+  SMTP          // Any provider through SMTP + IMAP and a password / app password
+  SANDBOX       // Never delivers. Used for trying the system out.
+}
+
+enum MailboxStatus {
+  ACTIVE
+  PAUSED        // paused by a person
+  AUTO_PAUSED   // paused by the system (bounce rate, complaints)
+  ERROR         // credentials rejected or connection failing
+}
+
+model Mailbox {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  displayName  String
+  provider     MailboxProvider
+  status       MailboxStatus   @default(ACTIVE)
+  statusReason String?
+
+  // Connection details (OAuth providers fill these in automatically)
+  smtpHost   String?
+  smtpPort   Int?
+  smtpSecure Boolean @default(true)
+  imapHost   String?
+  imapPort   Int?
+  imapSecure Boolean @default(true)
+  username   String?
+
+  // Encrypted with ENCRYPTION_KEY (AES-256-GCM). Password or OAuth refresh token.
+  secretEnc            String?
+  accessTokenEnc       String?
+  accessTokenExpiresAt DateTime?
+
+  // Sending limits for this mailbox
+  dailyLimit  Int @default(30)
+  hourlyLimit Int @default(8)
+
+  // Warm-up: start low and add a few sends per day until dailyLimit
+  warmupEnabled   Boolean   @default(false)
+  warmupStartedAt DateTime?
+  warmupStart     Int       @default(5)
+  warmupIncrement Int       @default(3)
+
+  signature String? // appended to every email from this mailbox (plain text)
+
+  nextSendAt       DateTime? // earliest moment this mailbox may send again
+  lastSentAt       DateTime?
+  lastInboxCheckAt DateTime?
+  lastInboxUid     Int?
+  inboxUidValidity String?
+  lastError        String?
+  lastErrorAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaignContacts CampaignContact[]
+  messages         Message[]
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum CampaignMode {
+  TEST // every email is captured (Mailpit / in-app test inbox), nothing reaches real recipients
+  LIVE
+}
+
+model Campaign {
+  id     String         @id @default(cuid())
+  name   String
+  status CampaignStatus @default(DRAFT)
+  mode   CampaignMode   @default(TEST)
+
+  // Test mode options
+  testFastForward Boolean @default(true)  // day delays become minutes, sending window ignored
+  testRedirectTo  String?                 // if set, test emails are really delivered to this address through the mailbox
+
+  // Sending window, in the campaign's time zone
+  timezone    String @default("Asia/Dubai")
+  sendDays    Int[]  @default([1, 2, 3, 4, 5]) // 0 = Sunday … 6 = Saturday
+  windowStart Int    @default(540)  // minutes after midnight (09:00)
+  windowEnd   Int    @default(1020) // 17:00
+
+  // Pacing across the whole campaign
+  hourlyLimit   Int @default(20)
+  minGapSeconds Int @default(90)
+  maxGapSeconds Int @default(270)
+  nextSendAt    DateTime?
+
+  // Behaviour
+  trackOpens        Boolean @default(true)
+  trackClicks       Boolean @default(true)
+  stopOnReply       Boolean @default(true)
+  stopOnDomainReply Boolean @default(true) // a reply from anyone at acme.com stops the sequence for everyone at acme.com
+  threadFollowUps   Boolean @default(false) // send step 2+ as "Re:" in the same thread
+  unsubscribeFooter Boolean @default(true)
+  unsubscribeText   String  @default("If you'd rather not hear from me again, just let me know here: {{unsubscribeUrl}}")
+
+  importReport Json?
+
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  steps    CampaignStep[]
+  contacts CampaignContact[]
+  messages Message[]
+  events   Event[]
+}
+
+model CampaignStep {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  order      Int      // 1, 2, 3 …
+  delayDays  Int      @default(0) // wait after the previous step (step 1 is always 0)
+  subject    String   @default("") // template used when the contact has no per-contact copy
+  body       String   @default("")
+
+  @@unique([campaignId, order])
+}
+
+model Contact {
+  id             String    @id @default(cuid())
+  email          String    @unique // stored lowercase
+  firstName      String?
+  lastName       String?
+  company        String?
+  unsubscribedAt DateTime?
+  bouncedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  enrollments CampaignContact[]
+}
+
+enum EnrollmentStatus {
+  QUEUED       // nothing sent yet
+  ACTIVE       // at least one step sent, more to come
+  COMPLETED    // all steps sent
+  REPLIED
+  BOUNCED
+  UNSUBSCRIBED
+  STOPPED      // stopped by a person or by a reply from the same company
+  FAILED       // gave up after repeated send errors
+}
+
+model CampaignContact {
+  id          String           @id @default(cuid())
+  campaignId  String
+  campaign    Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  mailboxId   String?
+  mailbox     Mailbox?         @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  senderEmail String?          // sender requested by the import file, kept even if that mailbox is not connected yet
+  status      EnrollmentStatus @default(QUEUED)
+  currentStep Int              @default(0) // last step sent
+  nextStepAt  DateTime?
+  attempts    Int              @default(0)
+  lastError   String?
+  content     Json?            // per-contact copy from the sheet: [{ subject, body }, …]
+  variables   Json?            // extra columns from the sheet, usable as {{column}}
+  threadRootMessageId String?
+  lastMessageId       String?
+  repliedAt   DateTime?
+  stoppedReason String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  messages Message[]
+  events   Event[]
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status, nextStepAt])
+  @@index([mailboxId, status])
+}
+
+enum MessageStatus {
+  SENT
+  FAILED
+}
+
+model Message {
+  id                String          @id @default(cuid())
+  token             String          @unique // public tracking token
+  campaignId        String
+  campaign          Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignContactId String
+  campaignContact   CampaignContact @relation(fields: [campaignContactId], references: [id], onDelete: Cascade)
+  mailboxId         String?
+  mailbox           Mailbox?        @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  step              Int
+  mode              CampaignMode
+  status            MessageStatus
+  error             String?
+
+  messageIdHeader String  @unique
+  fromEmail       String
+  toEmail         String
+  deliveredTo     String  // actual RCPT TO (differs from toEmail in test mode)
+  subject         String
+  bodyText        String
+  bodyHtml        String
+  links           Json    @default("[]") // original URLs, indexed by click route
+
+  sentAt         DateTime  @default(now())
+  firstOpenedAt  DateTime?
+  openCount      Int       @default(0)
+  firstClickedAt DateTime?
+  clickCount     Int       @default(0)
+  repliedAt      DateTime?
+  bouncedAt      DateTime?
+
+  events Event[]
+
+  @@index([campaignId, sentAt])
+  @@index([mailboxId, sentAt])
+}
+
+enum EventType {
+  SENT
+  FAILED
+  OPEN
+  CLICK
+  REPLY
+  AUTO_REPLY
+  BOUNCE
+  UNSUBSCRIBE
+  STOPPED
+}
+
+model Event {
+  id                String           @id @default(cuid())
+  type              EventType
+  campaignId        String
+  campaign          Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignContactId String?
+  campaignContact   CampaignContact? @relation(fields: [campaignContactId], references: [id], onDelete: Cascade)
+  messageId         String?
+  message           Message?         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  url               String?
+  userAgent         String?
+  ip                String?
+  likelyBot         Boolean          @default(false) // opens/clicks from link scanners and image proxies
+  detail            String?
+  createdAt         DateTime         @default(now())
+
+  @@index([campaignId, type, createdAt])
+  @@index([createdAt])
+}
+
+model WorkerHeartbeat {
+  id        String   @id // "worker"
+  lastBeat  DateTime
+  startedAt DateTime
+  host      String
+  info      Json?
+}

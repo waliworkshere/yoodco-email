@@ -1,0 +1,52 @@
+# Local / single-server setup:  docker compose up -d
+#   http://localhost:3000  the app          http://localhost:8025  Mailpit (test inbox)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: yoodco
+      POSTGRES_PASSWORD: yoodco
+      POSTGRES_DB: yoodco
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yoodco"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ["8025:8025"]
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    env_file: .env
+    environment: &dockerenv
+      DATABASE_URL: postgresql://yoodco:yoodco@db:5432/yoodco
+      SANDBOX_SMTP_URL: smtp://mailpit:1025
+    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  web:
+    build: .
+    env_file: .env
+    environment: *dockerenv
+    ports: ["3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    environment: *dockerenv
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+volumes:
+  pgdata:

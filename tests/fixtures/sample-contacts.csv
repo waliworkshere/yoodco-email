@@ -1,0 +1,13 @@
+companyName,firstName,lastName,recipientEmail,senderEmail,Email1_Subject,Email1_Body,Email2_Subject,Email2_Body,Email3_Subject,Email3_Body,industry
+Northwind,Ava,Stone,ava.stone@northwind.example,charles@yood.ai,Quick question for {{companyName}},"Hi {{firstName}},
+
+Saw what {{companyName}} is doing in {{industry}}.
+
+More here: https://yood.ai/how-it-works.
+
+Best,
+{{senderFirstName}}",Following up,"Hi {{firstName}}, any thoughts?",Last note,"Hi {{firstName}}, closing the loop. https://calendar.app.google/demo",SaaS
+Northwind,Liam,Park,LIAM.PARK@northwind.example,katy@yood.ai,Hello,Hi Liam,,,,,logistics
+Contoso,Mia,Chen,not-an-email,charles@yood.ai,Hello,Hi,,,,,
+Contoso,Noah,Reyes,ava.stone@northwind.example,charles@yood.ai,Dup,Dup,,,,,
+Fabrikam,Zoe,Ito,zoe@fabrikam.example,,Hello {{firstName|there}},Body,,,,,
