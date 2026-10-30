@@ -20,7 +20,9 @@ const VERB: Record<string, string> = {
 };
 
 function describe(e: FeedEvent) {
-  const who = e.campaignContact?.contact.email ?? "Someone";
+  const c = e.campaignContact?.contact;
+  const name = c ? [c.firstName, c.lastName].filter(Boolean).join(" ") : "";
+  const who = c ? (name ? `${name}${c.company ? ` (${c.company})` : ""}` : c.email) : "Someone";
   if (e.type === "SENT") return <><b>{who}</b> <span className="muted">was emailed</span></>;
   if (e.type === "FAILED" || e.type === "STOPPED") return <><span className="muted">{e.type === "FAILED" ? "Send failed for" : "Stopped"}</span> <b>{who}</b></>;
   return <><b>{who}</b> <span className="muted">{VERB[e.type] ?? e.type.toLowerCase()}</span></>;
