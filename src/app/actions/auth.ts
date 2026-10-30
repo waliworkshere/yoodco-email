@@ -3,13 +3,17 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { createSession, destroySession } from "@/lib/auth";
+import { env } from "@/lib/env";
 
 export async function login(_prev: { error?: string } | undefined, form: FormData) {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   const next = String(form.get("next") ?? "/");
-  if ((process.env.SESSION_SECRET ?? "").length < 32 || (process.env.ENCRYPTION_KEY ?? "").length < 32) {
-    return { error: "The app is not fully set up: SESSION_SECRET and ENCRYPTION_KEY (32+ characters) must be set in the hosting settings, then redeploy." };
+  try {
+    void env.sessionSecret;
+    void env.encryptionKey;
+  } catch {
+    return { error: "The app is not fully set up: add a database (DATABASE_URL) or set SESSION_SECRET and ENCRYPTION_KEY, then redeploy." };
   }
   let user;
   try {

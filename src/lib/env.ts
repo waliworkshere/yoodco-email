@@ -2,6 +2,27 @@
  * Central access to configuration. Values are read lazily so the worker,
  * the web app and the tests can each load their own environment.
  */
+import { createHash } from "node:crypto";
+
+/**
+ * When SESSION_SECRET / ENCRYPTION_KEY are not set (quick test deploys), derive stable keys
+ * from the database password, which is already secret. Set real values for production;
+ * note that changing ENCRYPTION_KEY later means reconnecting mailboxes.
+ */
+function derived(purpose: string): string {
+  const raw = Object.entries(process.env).find(([k, v]) => v && (k === "DATABASE_URL" || k.endsWith("_DATABASE_URL")))?.[1] ?? "";
+  let pass = "";
+  try {
+    const u = new URL(raw);
+    pass = decodeURIComponent(u.password);
+    if (pass) pass = `${decodeURIComponent(u.username)}:${pass}`;
+  } catch {
+    /* not a URL */
+  }
+  if (!pass) return "";
+  return createHash("sha256").update(`yood-outreach:${purpose}:${pass}`).digest("hex");
+}
+
 function read(name: string, fallback?: string): string {
   const v = process.env[name];
   if (v === undefined || v === "") {
@@ -13,15 +34,16 @@ function read(name: string, fallback?: string): string {
 
 export const env = {
   get appUrl() {
-    return read("APP_URL", "http://localhost:3000").replace(/\/+$/, "");
+    const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "";
+    return (process.env.APP_URL || vercel || "http://localhost:3000").replace(/\/+$/, "");
   },
   get sessionSecret() {
-    const s = read("SESSION_SECRET");
+    const s = process.env.SESSION_SECRET || derived("session") || read("SESSION_SECRET");
     if (s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters.");
     return s;
   },
   get encryptionKey() {
-    const s = read("ENCRYPTION_KEY");
+    const s = process.env.ENCRYPTION_KEY || derived("encryption") || read("ENCRYPTION_KEY");
     if (s.length < 32) throw new Error("ENCRYPTION_KEY must be at least 32 characters.");
     return s;
   },

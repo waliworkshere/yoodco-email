@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify } from "jose";
 
 // Public routes: login, tracking endpoints, unsubscribe page, health check.
 const PUBLIC = [/^\/login/, /^\/t\//, /^\/u\//, /^\/api\/health/, /^\/api\/cron\//, /^\/_next\//, /^\/favicon/, /^\/icon/, /^\/logo\.png$/];
@@ -8,15 +7,8 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.some((re) => re.test(pathname))) return NextResponse.next();
 
-  const token = req.cookies.get("yc_session")?.value;
-  if (token && process.env.SESSION_SECRET) {
-    try {
-      await jwtVerify(token, new TextEncoder().encode(process.env.SESSION_SECRET));
-      return NextResponse.next();
-    } catch {
-      /* fall through to login */
-    }
-  }
+  // Full signature check happens on the server in every page and route (requireUser/getSession)
+  if (req.cookies.get("yc_session")?.value) return NextResponse.next();
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;

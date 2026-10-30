@@ -1,14 +1,17 @@
 import { db } from "@/lib/db";
 import { workerStatus } from "@/lib/stats";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 /** Health and configuration check. Reports only whether settings are present, never their values. */
 export async function GET() {
+  const has = (fn: () => string) => { try { return fn().length >= 32; } catch { return false; } };
   const config = {
-    sessionSecret: (process.env.SESSION_SECRET ?? "").length >= 32,
-    encryptionKey: (process.env.ENCRYPTION_KEY ?? "").length >= 32,
-    appUrl: Boolean(process.env.APP_URL),
+    sessionSecret: has(() => env.sessionSecret),
+    encryptionKey: has(() => env.encryptionKey),
+    secretsFromSettings: Boolean(process.env.SESSION_SECRET && process.env.ENCRYPTION_KEY),
+    appUrl: env.appUrl,
   };
   try {
     await db.$queryRaw`SELECT 1`;
