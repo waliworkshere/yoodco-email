@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "../lib/db";
 import { env } from "../lib/env";
 import { tick } from "../lib/engine/scheduler";
+import { claimLeadership as claim } from "../lib/engine/runner";
 import { scanInboxes } from "../lib/engine/inbox";
 
 const instance = `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 6)}`;
@@ -22,19 +23,7 @@ const stats = { sent: 0, failed: 0, ticks: 0 };
 const log = (msg: string, extra?: unknown) =>
   console.log(`${new Date().toISOString()} ${msg}${extra ? " " + JSON.stringify(extra) : ""}`);
 
-/** Only one worker sends at a time: the one holding a fresh heartbeat. */
-async function claimLeadership(): Promise<boolean> {
-  const now = new Date();
-  const hb = await db.workerHeartbeat.findUnique({ where: { id: "worker" } });
-  const staleAfter = env.workerTickSeconds * 3000 + 15_000;
-  if (hb && hb.host !== instance && now.getTime() - hb.lastBeat.getTime() < staleAfter) return false;
-  await db.workerHeartbeat.upsert({
-    where: { id: "worker" },
-    create: { id: "worker", lastBeat: now, startedAt, host: instance, info: stats },
-    update: { lastBeat: now, host: instance, info: stats, ...(hb?.host !== instance ? { startedAt } : {}) },
-  });
-  return true;
-}
+const claimLeadership = () => claim(instance, startedAt, stats);
 
 async function loop() {
   log(`worker ${instance} started (tick ${env.workerTickSeconds}s, inbox every ${env.inboxScanMinutes}m)`);

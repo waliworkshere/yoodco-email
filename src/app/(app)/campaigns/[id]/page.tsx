@@ -12,6 +12,7 @@ import { EmailsTab } from "./EmailsTab";
 import { ActivityTab } from "./ActivityTab";
 import { SettingsTab } from "./SettingsTab";
 import { LaunchTab } from "./LaunchTab";
+import { TestRunDriver } from "./TestRunDriver";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const c = await db.campaign.findUnique({ where: { id: (await params).id }, select: { name: true } });
@@ -106,6 +107,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       ) : null}
 
       <Flash sp={sp} />
+      {isTest && campaign.status === "RUNNING" ? <TestRunDriver campaignId={id} /> : null}
 
       <nav className="tabs" aria-label="Campaign sections">
         {TABS.map(([key, label]) => (

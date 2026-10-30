@@ -37,6 +37,12 @@ async function main() {
   if (!(await db.user.findUnique({ where: { email: demoEmail } }))) {
     await db.user.create({ data: { email: demoEmail, name: "Demo Admin", role: "ADMIN", passwordHash: await bcrypt.hash("yood-demo-2026", 11) } });
   }
+  // --once: used by the deploy setup, only creates the demo the first time
+  if (process.argv.includes("--once") && (await db.campaign.count({ where: { name: { startsWith: "Demo ·" } } })) > 0) {
+    console.log("Demo already loaded.");
+    return;
+  }
+
   for (const email of SENDERS) {
     const name = email.split("@")[0].replace(/^./, (c) => c.toUpperCase());
     const existing = await db.mailbox.findUnique({ where: { email } });

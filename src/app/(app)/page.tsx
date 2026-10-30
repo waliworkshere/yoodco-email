@@ -63,7 +63,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
       {worker.state !== "online" ? (
         <Notice tone="warn" title={worker.state === "never" ? "The background sender has not started yet" : "The background sender is offline"}>
-          Campaigns only send while the worker process is running. Start it with <code>npm run worker</code> or <code>docker compose up -d worker</code>.
+          Test campaigns run while their page is open. Live campaigns need the sender: <code>npm run worker</code> on a server, or a scheduler calling <code>/api/cron/tick</code> every minute (see docs/DEPLOY_VERCEL.md).
         </Notice>
       ) : null}
 

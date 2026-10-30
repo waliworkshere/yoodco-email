@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
 // Public routes: login, tracking endpoints, unsubscribe page, health check.
-const PUBLIC = [/^\/login/, /^\/t\//, /^\/u\//, /^\/api\/health/, /^\/_next\//, /^\/favicon/, /^\/icon/, /^\/logo\.png$/];
+const PUBLIC = [/^\/login/, /^\/t\//, /^\/u\//, /^\/api\/health/, /^\/api\/cron\//, /^\/_next\//, /^\/favicon/, /^\/icon/, /^\/logo\.png$/];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

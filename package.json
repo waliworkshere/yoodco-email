@@ -13,7 +13,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "demo": "tsx scripts/demo.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "vercel-build": "prisma generate && node scripts/db-setup.mjs && next build"
   },
   "repository": {
     "type": "git",
