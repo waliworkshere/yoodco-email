@@ -51,7 +51,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <section className="hero hero-split">
+      <section className="hero hero-split hero-bleed">
         <div>
           <span className="eyebrow">Outreach overview</span>
           <h1 style={{ marginTop: 10 }}>
@@ -184,15 +184,16 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               <div className="card-body small muted" style={{ borderTop: "1px solid var(--line)", paddingBlock: 12 }}>Only sandbox mailboxes are connected, so nothing can go live yet.</div>
             ) : null}
           </section>
-          <section className="card">
-            <div className="card-head">
-              <h2>Latest responses</h2>
-              <Badge plain>Live</Badge>
-            </div>
-            <ActivityFeed events={events.slice(0, 6)} showCampaign emptyText="Replies and clicks from live campaigns appear here." />
-          </section>
         </div>
       </div>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Latest responses</h2>
+          <p>Replies, clicks, bounces and unsubscribes from live campaigns</p>
+        </div>
+        <ActivityFeed events={events.slice(0, 8)} showCampaign wide emptyText="Replies and clicks from live campaigns appear here." />
+      </section>
     </>
   );
 }

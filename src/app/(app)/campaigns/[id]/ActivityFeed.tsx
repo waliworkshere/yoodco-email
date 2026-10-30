@@ -28,8 +28,24 @@ function describe(e: FeedEvent) {
   return <><b>{who}</b> <span className="muted">{VERB[e.type] ?? e.type.toLowerCase()}</span></>;
 }
 
-export function ActivityFeed({ events, showCampaign, emptyText }: { events: FeedEvent[]; showCampaign?: boolean; emptyText?: string }) {
+export function ActivityFeed({ events, showCampaign, emptyText, wide }: { events: FeedEvent[]; showCampaign?: boolean; emptyText?: string; wide?: boolean }) {
   if (!events.length) return <div className="empty small">{emptyText ?? "No activity yet."}</div>;
+  if (wide) {
+    // One line per event across the full width: who · what · detail · campaign · when
+    return (
+      <ul className="feed feed-wide">
+        {events.map((e) => (
+          <li key={e.id}>
+            <span className={`dot ${e.type}`} />
+            <span className="who">{describe(e)}</span>
+            <span className="small muted detail">{e.detail ?? e.url ?? ""}</span>
+            {showCampaign && e.campaign ? <Link className="small camp" href={`/campaigns/${e.campaign.id}`}>{e.campaign.name}</Link> : <span />}
+            <time dateTime={e.createdAt.toISOString()}>{fmtDate(e.createdAt)}</time>
+          </li>
+        ))}
+      </ul>
+    );
+  }
   return (
     <ul className="feed">
       {events.map((e) => (

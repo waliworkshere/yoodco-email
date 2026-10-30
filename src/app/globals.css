@@ -277,3 +277,15 @@ tbody tr:hover td { background: #f7fbfd; }
 .feed li > div { min-width: 0; }
 .feed b, .feed .small { overflow-wrap: anywhere; }
 .feed li { grid-template-columns: 20px minmax(0, 1fr) max-content; }
+
+/* Full-width hero band (edge to edge like yood.co); content stays aligned with the page column */
+.main { overflow-x: clip; }
+.hero-bleed { border-radius: 0; margin-top: -28px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); padding-block: 56px 96px;
+  padding-left: max(20px, calc(50vw - 600px)); padding-right: max(20px, calc(50vw - 600px)); }
+@media (max-width: 1280px) { .hero-bleed { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); } }
+
+/* Wide activity rows */
+.feed-wide li { grid-template-columns: 14px minmax(0, 1.3fr) minmax(0, 1.6fr) minmax(0, 1fr) max-content; gap: 18px; align-items: center; }
+.feed-wide .dot { margin-top: 0; }
+.feed-wide .detail, .feed-wide .camp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .feed-wide li { grid-template-columns: 14px minmax(0, 1fr) max-content; } .feed-wide .detail, .feed-wide .camp { display: none; } }
