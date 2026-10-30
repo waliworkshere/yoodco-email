@@ -5,6 +5,7 @@
  * Run: npm run demo   (then press "Start test run" on the campaign)
  */
 import "../src/worker/load-env";
+import bcrypt from "bcryptjs";
 import { db } from "../src/lib/db";
 
 const SENDERS = ["charles@yood.ai", "katy@yood.ai", "bill@yood.ai", "sam@yood.ai", "samantha@yood.ai", "ashley@yood.ai", "julia@yood.ai"];
@@ -31,6 +32,11 @@ const STEPS = [
 ];
 
 async function main() {
+  // Demo login to showcase the app: demo@yood.ai / yood-demo-2026 (remove it in production under Settings → Team)
+  const demoEmail = "demo@yood.ai";
+  if (!(await db.user.findUnique({ where: { email: demoEmail } }))) {
+    await db.user.create({ data: { email: demoEmail, name: "Demo Admin", role: "ADMIN", passwordHash: await bcrypt.hash("yood-demo-2026", 11) } });
+  }
   for (const email of SENDERS) {
     const name = email.split("@")[0].replace(/^./, (c) => c.toUpperCase());
     const existing = await db.mailbox.findUnique({ where: { email } });
@@ -56,6 +62,7 @@ async function main() {
     await db.campaignContact.create({ data: { campaignId: campaign.id, contactId: contact.id, mailboxId: mailboxes[i % mailboxes.length].id } });
   }
   console.log(`Demo ready: ${PEOPLE.length} fictional contacts across ${mailboxes.length} sandbox mailboxes.`);
+  console.log("Demo login: demo@yood.ai / yood-demo-2026");
   console.log(`Open ${process.env.APP_URL ?? "http://localhost:3000"}/campaigns/${campaign.id} and press "Start test run".`);
 }
 

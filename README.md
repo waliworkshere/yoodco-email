@@ -29,10 +29,10 @@ cd yoodco-email
 cp .env.example .env
 # edit .env: set SESSION_SECRET, ENCRYPTION_KEY (openssl rand -base64 48), ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose up -d --build
-docker compose exec web npx tsx scripts/demo.ts   # optional: demo campaign with fictional contacts
+docker compose exec web npx tsx scripts/demo.ts   # optional: demo login + demo campaign with fictional contacts
 ```
 
-- App: <http://localhost:3000> (sign in with ADMIN_EMAIL / ADMIN_PASSWORD)
+- App: <http://localhost:3000> (sign in with ADMIN_EMAIL / ADMIN_PASSWORD, or after the demo script with `demo@yood.ai` / `yood-demo-2026`; remove that account before going live)
 - Test inbox (Mailpit): <http://localhost:8025>
 
 Then: open the demo campaign → **Start test run**. Within a few minutes all 24 fictional contacts receive all three emails in Mailpit. Open one in Mailpit and click its link to see an open and a click appear on the dashboard; use **Actions → Simulate a reply** on a contact to watch the sequence stop. See [docs/TESTING.md](docs/TESTING.md) for the full walkthrough.

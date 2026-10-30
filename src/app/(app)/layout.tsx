@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">Y</span>
+          <span className="brand-mark"><img src="/logo.png" alt="Yood" /></span>
           <span>Yoodco Email<small>Outbound sequences</small></span>
         </div>
         <Nav />
