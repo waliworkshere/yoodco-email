@@ -13,11 +13,23 @@ import { ActivityTab } from "./ActivityTab";
 import { SettingsTab } from "./SettingsTab";
 import { LaunchTab } from "./LaunchTab";
 import { TestRunDriver } from "./TestRunDriver";
+import { Suspense } from "react";
+import { Tour, type TourStep } from "@/components/Tour";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const c = await db.campaign.findUnique({ where: { id: (await params).id }, select: { name: true } });
   return { title: c?.name ?? "Campaign" };
 }
+
+
+const CAMPAIGN_TOUR: TourStep[] = [
+  { target: '[data-tour="camp-head"]', title: "One campaign, one sheet", body: "The name, its status (draft, running, paused or completed) and whether it is in test mode or live. Start, pause and other actions are on the right." },
+  { target: '[data-tour="test-banner"]', title: "Test mode keeps it safe", body: "While this banner shows, every email is captured and nobody receives anything. A day of waiting lasts one minute, so a whole sequence plays out quickly." },
+  { target: ".tour-start", title: "Start the test run", body: "Press this to watch the sequence run: emails go out one by one, follow-ups arrive on schedule, and the numbers update on their own." },
+  { target: '[data-tour="tabs"]', title: "Everything about this campaign", body: "Overview has the results. Contacts shows where each person is in the sequence. Emails is every email sent. Activity is the timeline. Settings has pacing and copy. Test & launch takes you live." },
+  { target: '[data-tour="kpis"]', title: "Results per person", body: "How many people were reached and what share of them opened, clicked and replied. Below it you will find the same numbers per email and per mailbox." },
+  { title: "Try acting like a recipient", body: "In the Contacts tab, open Actions on anyone who has been emailed and simulate a reply. Their follow-ups stop, and so do their colleagues' at the same company." },
+];
 
 const TABS = [
   ["overview", "Overview"],
@@ -43,7 +55,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head" data-tour="camp-head">
         <div className="title">
           <span className="crumbs"><Link href="/campaigns">Campaigns</Link> / {campaign.name}</span>
           <div className="title-row">
@@ -62,7 +74,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
           {canStart ? (
             <form action={startCampaign}>
               <input type="hidden" name="id" value={id} />
-              <SubmitButton className={isTest ? "btn btn-primary" : "btn btn-go"} pending="Starting…">
+              <SubmitButton className={isTest ? "btn btn-primary tour-start" : "btn btn-go tour-start"} pending="Starting…">
                 <IconPlay /> {campaign.status === "PAUSED" ? "Resume" : isTest ? "Start test run" : "Start sending"}
               </SubmitButton>
             </form>
@@ -91,7 +103,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       </div>
 
       {isTest ? (
-        <div className="test-banner">
+        <div className="test-banner" data-tour="test-banner">
           <span>
             <strong>Test mode.</strong>{" "}
             {campaign.testRedirectTo
@@ -107,9 +119,10 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       ) : null}
 
       <Flash sp={sp} />
+      <Suspense fallback={null}><Tour id="campaign" steps={CAMPAIGN_TOUR} /></Suspense>
       {isTest && campaign.status === "RUNNING" ? <TestRunDriver campaignId={id} /> : null}
 
-      <nav className="tabs" aria-label="Campaign sections">
+      <nav className="tabs" aria-label="Campaign sections" data-tour="tabs">
         {TABS.map(([key, label]) => (
           <Link key={key} href={`/campaigns/${id}${key === "overview" ? "" : `?tab=${key}`}`} aria-current={tab === key ? "page" : undefined}>
             {label}

@@ -72,7 +72,7 @@ export async function OverviewTab({ campaign }: { campaign: Campaign & { steps: 
         </Notice>
       ) : null}
 
-      <div className="kpis">
+      <div className="kpis" data-tour="kpis">
         <Kpi label="Contacts" value={fmtNum(people.enrolled)} sub={`${fmtNum(people.contacted)} reached`} />
         <Kpi label="Opened" value={fmtPct(people.opened, people.contacted)} sub={`${fmtNum(people.opened)} people`} />
         <Kpi label="Clicked" value={fmtPct(people.clicked, people.contacted)} sub={`${fmtNum(people.clicked)} people`} />

@@ -6,9 +6,26 @@ import { IconPlus } from "@/components/icons";
 import {
   Badge, CampaignStatusBadge, DailyChart, Empty, Flash, fmtNum, fmtRelative, Kpi, MailboxStatusBadge, ModeBadge, Notice, Progress,
 } from "@/components/ui";
+import { Suspense } from "react";
+import { Tour, type TourStep } from "@/components/Tour";
 import { ActivityFeed } from "./campaigns/[id]/ActivityFeed";
 
 export const metadata = { title: "Overview" };
+
+const OVERVIEW_TOUR: TourStep[] = [
+  { title: "Welcome to Yood Outreach", body: "A one-minute tour of where everything is. You can skip it now and replay it any time from the Tour button at the top." },
+  { target: '[data-tour="nav"]', title: "Four places to know", body: "Overview is this page. Campaigns holds your sequences and their results. Mailboxes is where the sending accounts are connected. Settings has your team and the do-not-email list." },
+  { target: '[data-tour="sequence"]', title: "How every sequence runs", body: "Each contact gets Email 1 from their own sender, then Email 2 and Email 3 a few days apart, only while they have not replied. Sending is paced at 20 an hour during office hours." },
+  { target: '[data-tour="kpis"]', title: "Your numbers for the week", body: "Emails sent, and how many were opened, clicked, replied to or bounced over the last 7 days. Test runs are never counted here." },
+  { target: '[data-tour="chart"]', title: "Sending, day by day", body: "Each bar is one day, split by Email 1, 2 and 3, so you can see follow-ups going out on schedule." },
+  { target: '[data-tour="mailboxes"]', title: "Mailbox health", body: "Every sending account with how much it sent today against its daily limit. A mailbox pauses itself if too many of its emails bounce." },
+  { target: '[data-tour="campaigns"]', title: "Your campaigns", body: "Each campaign is one imported sheet. Open one to see its contacts, every email sent and the results per email and per mailbox." },
+  { target: '[data-tour="responses"]', title: "Who is responding", body: "Replies, clicks, bounces and unsubscribes as they come in. Anyone who replies is taken out of the sequence automatically." },
+  { target: '[data-tour="sender"]', title: "The sender light", body: "Green means the sender is running and emails go out on schedule. Grey means it is idle: test runs still play out while their campaign page is open." },
+  { target: '[data-tour="new"]', title: "Start here", body: "Upload your contact sheet to create a campaign. It always starts in test mode, so nothing reaches anyone until you choose to go live." },
+  { target: '[data-tour="tour-btn"]', title: "Replay this tour", body: "Press Tour on any page to see this again. Each campaign page has its own short tour too." },
+];
+
 
 export default async function Overview({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -63,11 +80,11 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           </h1>
           <p>Live sending over the last 7 days. Test runs are kept separate.</p>
           <div className="actions">
-            <Link className="btn btn-primary btn-lg" href="/campaigns/new"><IconPlus /> New campaign</Link>
+            <Link className="btn btn-primary btn-lg" href="/campaigns/new" data-tour="new"><IconPlus /> New campaign</Link>
             <Link className="btn btn-lg" href="/campaigns">View campaigns</Link>
           </div>
         </div>
-        <div className="hero-panel" aria-label="How a sequence runs">
+        <div className="hero-panel" aria-label="How a sequence runs" data-tour="sequence">
           <span className="eyebrow">How every sequence runs</span>
           <ol className="seq">
             <li><b>Email 1</b><span>From the contact&apos;s own sender</span></li>
@@ -82,6 +99,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </div>
       </section>
       <Flash sp={sp} />
+      <Suspense fallback={null}><Tour id="overview" steps={OVERVIEW_TOUR} /></Suspense>
 
       {worker.state !== "online" && liveRunning > 0 ? (
         <Notice tone="warn" title="A live campaign is waiting for the sender">
@@ -107,7 +125,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </section>
       ) : null}
 
-      <div className="kpis">
+      <div className="kpis" data-tour="kpis">
         <Kpi label="Emails sent" value={fmtNum(funnel.sent)} sub="last 7 days" />
         <Kpi label="Opened" value={fmtPct(funnel.opened, funnel.delivered)} sub={`${fmtNum(funnel.opened)} emails`} />
         <Kpi label="Clicked" value={fmtPct(funnel.clicked, funnel.delivered)} sub={`${fmtNum(funnel.clicked)} emails`} />
@@ -117,7 +135,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
       <div className="grid-3-1">
         <div className="stack" style={{ gap: 22 }}>
-          <section className="card">
+          <section className="card" data-tour="chart">
             <div className="card-head">
               <h2>Emails sent per day</h2>
               <p>Last 14 days, live campaigns</p>
@@ -126,7 +144,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               <DailyChart series={series} steps={3} />
             </div>
           </section>
-          <section className="card">
+          <section className="card" data-tour="campaigns">
             <div className="card-head">
               <h2>Campaigns</h2>
               <Link className="small" href="/campaigns">All campaigns</Link>
@@ -160,7 +178,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           </section>
         </div>
         <div className="stack" style={{ gap: 22 }}>
-          <section className="card">
+          <section className="card" data-tour="mailboxes">
             <div className="card-head">
               <h2>Mailboxes</h2>
               <Link className="small" href="/mailboxes">Manage</Link>
@@ -187,7 +205,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </div>
       </div>
 
-      <section className="card">
+      <section className="card" data-tour="responses">
         <div className="card-head">
           <h2>Latest responses</h2>
           <p>Replies, clicks, bounces and unsubscribes from live campaigns</p>

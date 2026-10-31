@@ -4,6 +4,8 @@ import { workerStatus } from "@/lib/stats";
 import { Nav } from "@/components/Nav";
 import { logout } from "../actions/auth";
 import { fmtRelative } from "@/components/ui";
+import { TourButton } from "@/components/Tour";
+import { TableLabels } from "@/components/TableLabels";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +22,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <img src="/logo.png" alt="" />
             <span>Yood<small>Outreach</small></span>
           </Link>
-          <Nav />
+          <div data-tour="nav" className="nav-wrap"><Nav /></div>
           <div className="top-right">
-            <span className={`live-dot ${worker.state}`} title="The sender that paces and sends emails">{workerLabel}</span>
+            <span data-tour="sender" className={`live-dot ${worker.state}`} title="The sender that paces and sends emails">{workerLabel}</span>
+            <span data-tour="tour-btn"><TourButton /></span>
             <span className="who">{user.name}</span>
             <form action={logout}><button className="linkish" type="submit">Sign out</button></form>
           </div>
         </div>
       </header>
+      <TableLabels />
       <main className="main">
         <div className="container">{children}</div>
       </main>
