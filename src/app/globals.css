@@ -431,3 +431,6 @@ tbody tr:hover td { background: #f7fbfd; }
 .inline-form .input { height: 32px; padding: 4px 8px; font-size: 13px; }
 .kpi.highlight { border-color: var(--green); box-shadow: inset 0 3px 0 var(--green); }
 .copyable { display: block; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; user-select: all; font-size: 13px; }
+/* Five nav items: keep the top bar on one line on laptop screens */
+@media (max-width: 1500px) { .top-right .who { display: none; } .nav a { padding: 8px 11px; } }
+@media (min-width: 981px) and (max-width: 1180px) { .nav a svg { display: none; } .live-dot { font-size: 0; } }
