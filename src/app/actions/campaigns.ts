@@ -9,6 +9,9 @@ import { composeStep, messageIdFor } from "@/lib/engine/send";
 import { applyBounce, applyReply } from "@/lib/engine/outcomes";
 import { deliver } from "@/lib/mail/transport";
 import { randomToken } from "@/lib/crypto";
+import { availabilityFor, busyFor, hostFor, recordMeeting, sendInvite } from "@/lib/meetings/record";
+import { availableSlots } from "@/lib/meetings/slots";
+import { isValidTimezone } from "@/lib/meetings/time";
 
 const go = (path: string, params: Record<string, string>): never => {
   const [base, query] = path.split("?");
@@ -162,11 +165,13 @@ export async function pauseCampaign(form: FormData) {
 }
 
 async function resetRun(id: string) {
+  await db.meeting.deleteMany({ where: { campaignId: id } });
   await db.event.deleteMany({ where: { campaignId: id } });
   await db.message.deleteMany({ where: { campaignId: id } });
   await db.campaignContact.updateMany({
     where: { campaignId: id },
-    data: { status: "QUEUED", currentStep: 0, nextStepAt: null, attempts: 0, lastError: null, threadRootMessageId: null, lastMessageId: null, repliedAt: null, stoppedReason: null },
+    data: { status: "QUEUED", currentStep: 0, nextStepAt: null, attempts: 0, lastError: null, threadRootMessageId: null, lastMessageId: null, repliedAt: null, stoppedReason: null,
+      replyText: null, replyMessageId: null, replyIntent: null, replyIntentBy: null, bookingReplyDueAt: null, bookingReplySentAt: null, meetingBookedAt: null },
   });
 }
 
@@ -249,11 +254,7 @@ export async function updateCampaignSettings(form: FormData) {
   const testRedirectTo = str(form, "testRedirectTo").toLowerCase();
   if (testRedirectTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testRedirectTo)) go(`/campaigns/${id}`, { tab: "settings", error: "The test inbox address is not a valid email." });
   const tz = str(form, "timezone") || "Asia/Dubai";
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: tz });
-  } catch {
-    go(`/campaigns/${id}`, { tab: "settings", error: `Unknown time zone "${tz}". Use a name like Asia/Dubai or Europe/Paris.` });
-  }
+  if (!isValidTimezone(tz)) go(`/campaigns/${id}`, { tab: "settings", error: `Unknown time zone "${tz}". Use a name like America/Chicago or Asia/Dubai.` });
 
   await db.campaign.update({
     where: { id },
@@ -277,6 +278,36 @@ export async function updateCampaignSettings(form: FormData) {
       testRedirectTo: testRedirectTo || null,
     },
   });
+  if (form.has("bookingMode")) {
+    const mode = str(form, "bookingMode");
+    const bookingUrl = str(form, "bookingUrl");
+    const host = str(form, "meetingHostEmail").toLowerCase();
+    const replyText = String(form.get("bookingReplyText") ?? "").trim();
+    if (mode === "EXTERNAL" && !/^https:\/\//.test(bookingUrl)) go(`/campaigns/${id}`, { tab: "settings", error: "Paste your booking link (it starts with https://), or choose the built-in booking page." });
+    if (host && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(host)) go(`/campaigns/${id}`, { tab: "settings", error: "The meeting host is not a valid email address." });
+    if (replyText && !/\{\{\s*booking(link|url)\s*\}\}/i.test(replyText)) go(`/campaigns/${id}`, { tab: "settings", error: "The booking reply must contain {{bookingLink}}." });
+    const minD = int(form, "bookingReplyMinDelay", 4, 0, 240);
+    await db.campaign.update({
+      where: { id },
+      data: {
+        bookingMode: mode === "EXTERNAL" ? "EXTERNAL" : mode === "OFF" ? "OFF" : "BUILT_IN",
+        bookingUrl: bookingUrl || null,
+        meetingHostEmail: host || null,
+        meetingTitle: str(form, "meetingTitle") || undefined,
+        meetingDurationMin: int(form, "meetingDurationMin", 30, 10, 240),
+        meetingLocation: str(form, "meetingLocation") || null,
+        meetingDays: form.getAll("meetingDays").map(Number).filter((n) => n >= 0 && n <= 6),
+        meetingStart: hhmmToMinutes(str(form, "meetingStart"), 600),
+        meetingEnd: hhmmToMinutes(str(form, "meetingEnd"), 1020),
+        meetingNoticeHours: int(form, "meetingNoticeHours", 12, 0, 336),
+        meetingHorizonDays: int(form, "meetingHorizonDays", 14, 1, 60),
+        autoBookingReply: bool(form, "autoBookingReply"),
+        bookingReplyText: replyText || undefined,
+        bookingReplyMinDelay: minD,
+        bookingReplyMaxDelay: Math.max(minD, int(form, "bookingReplyMaxDelay", 12, 0, 480)),
+      },
+    });
+  }
 
   const steps = await db.campaignStep.findMany({ where: { campaignId: id } });
   for (const s of steps) {
@@ -364,7 +395,19 @@ export async function simulate(form: FormData) {
   if (!msg) go(back, { error: "Nothing has been sent to this contact yet." });
   const m = msg!;
   const now = new Date();
-  if (what === "reply") await applyReply(m, { detail: "Simulated reply: \"Sounds interesting, can we talk Thursday?\"" });
+  const replies: Record<string, string> = {
+    reply: "Sounds interesting, happy to have a quick call. What does your calendar look like next week?",
+    reply_question: "How is this different from what we use today?",
+    reply_not: "Thanks, but we're not interested at the moment.",
+    reply_unsub: "Please remove me from your list.",
+  };
+  if (replies[what]) await applyReply(m, { detail: `Simulated reply: "${replies[what]}"`, text: replies[what], at: now });
+  if (what === "meeting") {
+    const cc2 = await db.campaignContact.findUniqueOrThrow({ where: { id: ccId }, include: { contact: true, campaign: true, mailbox: true } });
+    const slot = availableSlots(availabilityFor(cc2.campaign), await busyFor(hostFor(cc2.campaign, cc2.mailbox)), now)[0] ?? new Date(now.getTime() + 2 * 86_400_000);
+    const { meeting } = await recordMeeting({ source: "BOOKING_PAGE", email: cc2.contact.email, startsAt: slot, location: cc2.campaign.meetingLocation, enrollment: cc2 });
+    await sendInvite(meeting, cc2).catch(() => undefined);
+  }
   if (what === "bounce") await applyBounce(m, "Simulated bounce: 550 5.1.1 mailbox does not exist");
   if (what === "open" || what === "click") {
     const links = (m.links as string[]) ?? [];
@@ -379,7 +422,16 @@ export async function simulate(form: FormData) {
           : { clickCount: { increment: 1 }, firstClickedAt: m.firstClickedAt ?? now, firstOpenedAt: m.firstOpenedAt ?? now },
     });
   }
-  const labels: Record<string, string> = { reply: "Reply", bounce: "Bounce", open: "Open", click: "Click" };
+  const labels: Record<string, string> = {
+    reply: "Interested reply",
+    reply_question: "Question",
+    reply_not: "Not-interested reply",
+    reply_unsub: "Removal request",
+    meeting: "Meeting booking",
+    bounce: "Bounce",
+    open: "Open",
+    click: "Click",
+  };
   go(back, { notice: `${labels[what] ?? "Event"} recorded for this contact.` });
 }
 

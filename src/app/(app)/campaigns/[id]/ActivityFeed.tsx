@@ -17,6 +17,9 @@ const VERB: Record<string, string> = {
   BOUNCE: "bounced",
   UNSUBSCRIBE: "unsubscribed",
   STOPPED: "sequence stopped for",
+  BOOKING_LINK_SENT: "was sent the booking link",
+  MEETING: "booked a meeting",
+  MEETING_CANCELED: "canceled their meeting",
 };
 
 function describe(e: FeedEvent) {
@@ -24,6 +27,7 @@ function describe(e: FeedEvent) {
   const name = c ? [c.firstName, c.lastName].filter(Boolean).join(" ") : "";
   const who = c ? (name ? `${name}${c.company ? ` (${c.company})` : ""}` : c.email) : "Someone";
   if (e.type === "SENT") return <><b>{who}</b> <span className="muted">was emailed</span></>;
+  if (e.type === "BOOKING_LINK_SENT") return <><b>{who}</b> <span className="muted">got the booking link</span></>;
   if (e.type === "FAILED" || e.type === "STOPPED") return <><span className="muted">{e.type === "FAILED" ? "Send failed for" : "Stopped"}</span> <b>{who}</b></>;
   return <><b>{who}</b> <span className="muted">{VERB[e.type] ?? e.type.toLowerCase()}</span></>;
 }

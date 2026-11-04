@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { effectiveDailyLimit } from "@/lib/schedule";
-import { dailySends, fmtPct, mailboxUsage, messageFunnel, workerStatus } from "@/lib/stats";
+import { dailySends, fmtPct, mailboxUsage, meetingCounts, messageFunnel, workerStatus } from "@/lib/stats";
 import { IconPlus } from "@/components/icons";
 import {
-  Badge, CampaignStatusBadge, DailyChart, Empty, Flash, fmtNum, fmtRelative, Kpi, MailboxStatusBadge, ModeBadge, Notice, Progress,
+  Badge, CampaignStatusBadge, fmtDate, MeetingStatusBadge, DailyChart, Empty, Flash, fmtNum, fmtRelative, Kpi, MailboxStatusBadge, ModeBadge, Notice, Progress,
 } from "@/components/ui";
 import { Suspense } from "react";
 import { Tour, type TourStep } from "@/components/Tour";
@@ -14,10 +14,11 @@ export const metadata = { title: "Overview" };
 
 const OVERVIEW_TOUR: TourStep[] = [
   { title: "Welcome to Yood Outreach", body: "A one-minute tour of where everything is. You can skip it now and replay it any time from the Tour button at the top." },
-  { target: '[data-tour="nav"]', title: "Four places to know", body: "Overview is this page. Campaigns holds your sequences and their results. Mailboxes is where the sending accounts are connected. Settings has your team and the do-not-email list." },
+  { target: '[data-tour="nav"]', title: "Five places to know", body: "Overview is this page. Campaigns holds your sequences and their results. Meetings lists every call booked. Mailboxes is where the sending accounts are connected. Settings has your team, the do-not-email list and calendar tools." },
   { target: '[data-tour="sequence"]', title: "How every sequence runs", body: "Each contact gets Email 1 from their own sender, then Email 2 and Email 3 a few days apart, only while they have not replied. Sending is paced at 20 an hour during office hours." },
-  { target: '[data-tour="kpis"]', title: "Your numbers for the week", body: "Emails sent, and how many were opened, clicked, replied to or bounced over the last 7 days. Test runs are never counted here." },
+  { target: '[data-tour="kpis"]', title: "Your numbers for the week", body: "Emails sent, and how many were opened, clicked or replied to over the last 7 days, plus the meetings that came out of it. Test runs are never counted here." },
   { target: '[data-tour="chart"]', title: "Sending, day by day", body: "Each bar is one day, split by Email 1, 2 and 3, so you can see follow-ups going out on schedule." },
+  { target: '[data-tour="meetings"]', title: "Meetings, booked for you", body: "When someone replies with interest, they get your booking link in the same thread a few minutes later. Once they pick a time it lands in your calendar and shows up here. The Meetings page has them all." },
   { target: '[data-tour="mailboxes"]', title: "Mailbox health", body: "Every sending account with how much it sent today against its daily limit. A mailbox pauses itself if too many of its emails bounce." },
   { target: '[data-tour="campaigns"]', title: "Your campaigns", body: "Each campaign is one imported sheet. Open one to see its contacts, every email sent and the results per email and per mailbox." },
   { target: '[data-tour="responses"]', title: "Who is responding", body: "Replies, clicks, bounces and unsubscribes as they come in. Anyone who replies is taken out of the sequence automatically." },
@@ -43,7 +44,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     mailboxUsage(),
     workerStatus(),
     db.event.findMany({
-      where: { type: { in: ["REPLY", "CLICK", "BOUNCE", "UNSUBSCRIBE"] }, likelyBot: false, campaign: { mode: "LIVE" } },
+      where: { type: { in: ["REPLY", "MEETING", "BOOKING_LINK_SENT", "CLICK", "BOUNCE", "UNSUBSCRIBE"] }, likelyBot: false, campaign: { mode: "LIVE" } },
       orderBy: { createdAt: "desc" },
       take: 12,
       include: { campaignContact: { include: { contact: true } }, campaign: { select: { name: true, id: true } } },
@@ -52,6 +53,10 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     db.message.count({ where: { mode: "LIVE" } }),
   ]);
   const liveRunning = await db.campaign.count({ where: { status: "RUNNING", mode: "LIVE" } });
+  const [meetingsWeek, upcoming] = await Promise.all([
+    meetingCounts({ mode: "LIVE", createdAt: { gte: since } }),
+    db.meeting.findMany({ where: { mode: "LIVE", status: "BOOKED", startsAt: { gte: new Date(Date.now() - 3_600_000) } }, orderBy: { startsAt: "asc" }, take: 5 }),
+  ]);
 
   const progress = await Promise.all(
     campaigns.map((c) => db.campaignContact.count({ where: { campaignId: c.id, status: { notIn: ["QUEUED", "ACTIVE"] } } })),
@@ -73,7 +78,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           <span className="eyebrow">Outreach overview</span>
           <h1 style={{ marginTop: 10 }}>
             {funnel.sent > 0 ? (
-              <><b>{fmtNum(funnel.sent)} emails</b> sent this week, <b>{fmtNum(funnel.replied)} replies</b> so far.</>
+              <><b>{fmtNum(funnel.sent)} emails</b> sent this week, <b>{fmtNum(funnel.replied)} replies</b> and <b>{fmtNum(meetingsWeek.booked)} meetings</b> booked.</>
             ) : (
               <>Paced outreach from <b>your own mailboxes</b>, without landing in spam.</>
             )}
@@ -130,6 +135,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Kpi label="Opened" value={fmtPct(funnel.opened, funnel.delivered)} sub={`${fmtNum(funnel.opened)} emails`} />
         <Kpi label="Clicked" value={fmtPct(funnel.clicked, funnel.delivered)} sub={`${fmtNum(funnel.clicked)} emails`} />
         <Kpi label="Replied" value={fmtPct(funnel.replied, funnel.delivered)} sub={`${fmtNum(funnel.replied)} replies`} />
+        <Kpi label="Meetings booked" value={fmtNum(meetingsWeek.booked)} sub={meetingsWeek.upcoming ? `${fmtNum(meetingsWeek.upcoming)} coming up` : "last 7 days"} highlight />
         <Kpi label="Bounced" value={fmtPct(funnel.bounced, funnel.sent)} sub={`${fmtNum(funnel.bounced)} emails`} />
       </div>
 
@@ -178,6 +184,27 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           </section>
         </div>
         <div className="stack" style={{ gap: 22 }}>
+          <section className="card" data-tour="meetings">
+            <div className="card-head">
+              <h2>Upcoming meetings</h2>
+              <Link className="small" href="/meetings">All meetings</Link>
+            </div>
+            {upcoming.length ? (
+              <ul className="mini-list">
+                {upcoming.map((m) => (
+                  <li key={m.id}>
+                    <div style={{ minWidth: 0 }}>
+                      <span className="cell-main trunc" style={{ display: "block" }}>{m.name || m.email}{m.company ? ` · ${m.company}` : ""}</span>
+                      <span className="cell-sub">{fmtDate(m.startsAt)}</span>
+                    </div>
+                    <MeetingStatusBadge status={m.status} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="card-body small muted">Meetings booked from replies appear here. Interested people get your booking link automatically.</div>
+            )}
+          </section>
           <section className="card" data-tour="mailboxes">
             <div className="card-head">
               <h2>Mailboxes</h2>
@@ -208,7 +235,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
       <section className="card" data-tour="responses">
         <div className="card-head">
           <h2>Latest responses</h2>
-          <p>Replies, clicks, bounces and unsubscribes from live campaigns</p>
+          <p>Meetings, replies, clicks, bounces and unsubscribes from live campaigns</p>
         </div>
         <ActivityFeed events={events.slice(0, 8)} showCampaign wide emptyText="Replies and clicks from live campaigns appear here." />
       </section>

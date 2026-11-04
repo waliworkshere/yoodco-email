@@ -7,6 +7,7 @@
 // CampaignContact  one contact enrolled in one campaign: assigned sender, progress, next due time
 // Message          every email the system sent (rendered copy kept for audit and the test inbox)
 // Event            open / click / reply / bounce / unsubscribe / failure timeline
+// Meeting          a call booked with a contact (booking page, Calendly / Cal.com, calendar invite or by hand)
 
 generator client {
   provider = "prisma-client-js"
@@ -139,6 +140,25 @@ model Campaign {
   unsubscribeFooter Boolean @default(true)
   unsubscribeText   String  @default("If you'd rather not hear from me again, just let me know here: {{unsubscribeUrl}}")
 
+  // Meetings: how interested contacts book a call
+  bookingMode          BookingMode @default(BUILT_IN)
+  bookingUrl           String?     // EXTERNAL: Calendly, Cal.com, Google appointment schedule …
+  meetingHostEmail     String?     // BUILT_IN: who receives the calendar invite besides the contact
+  meetingTitle         String      @default("Intro call: {{companyName|you}} × {{senderCompany|us}}")
+  meetingDurationMin   Int         @default(30)
+  meetingLocation      String?     // video link or phone number placed in the invite
+  meetingDays          Int[]       @default([1, 2, 3, 4, 5])
+  meetingStart         Int         @default(600)  // 10:00 in the campaign time zone
+  meetingEnd           Int         @default(1020) // 17:00
+  meetingNoticeHours   Int         @default(12)
+  meetingHorizonDays   Int         @default(14)
+
+  // Answering interested replies with the booking link
+  autoBookingReply     Boolean @default(true)
+  bookingReplyText     String  @default("Hi {{firstName|there}},\n\nGreat to hear from you. Here's a link to pick a time that suits you: {{bookingLink}}\n\nIf none of those times work, just reply with a couple that do and I'll send an invite.\n\nThanks,\n{{senderFirstName}}")
+  bookingReplyMinDelay Int     @default(4)  // minutes, randomised so it reads like a person
+  bookingReplyMaxDelay Int     @default(12)
+
   importReport Json?
 
   createdById String?
@@ -151,6 +171,13 @@ model Campaign {
   contacts CampaignContact[]
   messages Message[]
   events   Event[]
+  meetings Meeting[]
+}
+
+enum BookingMode {
+  BUILT_IN // our own booking page; sends calendar invites to the contact and the host
+  EXTERNAL // a Calendly / Cal.com / Google link; bookings come back by webhook or calendar email
+  OFF
 }
 
 model CampaignStep {
@@ -187,6 +214,17 @@ enum EnrollmentStatus {
   UNSUBSCRIBED
   STOPPED      // stopped by a person or by a reply from the same company
   FAILED       // gave up after repeated send errors
+  MEETING      // booked a meeting
+}
+
+enum ReplyIntent {
+  INTERESTED     // wants to talk: gets the booking link
+  QUESTION       // asked something: a person should answer
+  NOT_NOW        // maybe later
+  NOT_INTERESTED
+  UNSUBSCRIBE    // asked to be removed
+  WRONG_PERSON   // pointed to someone else
+  OTHER
 }
 
 model CampaignContact {
@@ -209,15 +247,31 @@ model CampaignContact {
   lastMessageId       String?
   repliedAt   DateTime?
   stoppedReason String?
+
+  // The reply, what it means, and the booking link answer
+  replyText          String?
+  replyMessageId     String?      // Message-ID header of their reply, to answer in the same thread
+  replyIntent        ReplyIntent?
+  replyIntentBy      String?      // "rules", "ai" or "person"
+  bookingReplyDueAt  DateTime?
+  bookingReplySentAt DateTime?
+  meetingBookedAt    DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   messages Message[]
   events   Event[]
+  meetings Meeting[]
 
   @@unique([campaignId, contactId])
   @@index([campaignId, status, nextStepAt])
   @@index([mailboxId, status])
+}
+
+enum MessageKind {
+  SEQUENCE      // Email 1, 2, 3 …
+  BOOKING_REPLY // the answer to an interested reply, with the booking link
+  INVITE        // calendar invite for a meeting booked on the built-in page
 }
 
 enum MessageStatus {
@@ -235,6 +289,7 @@ model Message {
   mailboxId         String?
   mailbox           Mailbox?        @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
   step              Int
+  kind              MessageKind     @default(SEQUENCE)
   mode              CampaignMode
   status            MessageStatus
   error             String?
@@ -272,6 +327,9 @@ enum EventType {
   BOUNCE
   UNSUBSCRIBE
   STOPPED
+  BOOKING_LINK_SENT
+  MEETING
+  MEETING_CANCELED
 }
 
 model Event {
@@ -300,4 +358,46 @@ model WorkerHeartbeat {
   startedAt DateTime
   host      String
   info      Json?
+}
+
+enum MeetingSource {
+  BOOKING_PAGE    // our built-in booking page
+  CALENDLY
+  CAL_COM
+  CALENDAR_INVITE // a calendar invitation seen in a connected inbox
+  WEBHOOK         // Zapier, Make or any other tool
+  MANUAL          // recorded by a teammate
+}
+
+enum MeetingStatus {
+  BOOKED
+  HELD
+  NO_SHOW
+  CANCELED
+}
+
+model Meeting {
+  id                String           @id @default(cuid())
+  campaignId        String?
+  campaign          Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignContactId String?
+  campaignContact   CampaignContact? @relation(fields: [campaignContactId], references: [id], onDelete: SetNull)
+  mode              CampaignMode     @default(LIVE)
+  source            MeetingSource
+  status            MeetingStatus    @default(BOOKED)
+  externalId        String?          @unique // booking id from Calendly / Cal.com / the invite UID
+  email             String           // the person who booked
+  name              String?
+  company           String?
+  title             String?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  hostEmail         String?
+  location          String?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([startsAt])
+  @@index([createdAt])
 }

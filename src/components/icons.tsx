@@ -35,3 +35,6 @@ export const IconPlay = (p: SVGProps<SVGSVGElement>) => (
 export const IconPause = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}><path d="M8 5v14M16 5v14" /></svg>
 );
+export const IconCalendar = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4M8.5 14.5l2 2 4-4" /></svg>
+);

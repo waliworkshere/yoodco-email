@@ -1,6 +1,6 @@
 # Yoodco Email
 
-Outbound email sequences sent from your team's own mailboxes, paced so they don't land in spam, with open, click and reply tracking.
+Outbound email sequences sent from your team's own mailboxes, paced so they don't land in spam, that turn interested replies into meetings in the calendar.
 
 Upload the same contact sheet you use today (contact, sender mailbox, and the copy for Email 1, 2 and 3). The system queues every email, sends at most a set number per hour with random gaps, pauses outside working hours, sends follow-ups on schedule, and stops the sequence the moment someone replies.
 
@@ -16,6 +16,8 @@ Upload the same contact sheet you use today (contact, sender mailbox, and the co
 | **Pacing** | Per campaign: emails per hour (default 20), random gap between emails (90–270 s), sending window (Mon–Fri 09:00–17:00 in your time zone). Per mailbox: daily and hourly limits, optional warm-up. |
 | **Sequences** | Email 1 → wait N days → Email 2 → wait → Email 3. Follow-ups can go in the same thread. |
 | **Stops automatically** | On reply (out-of-office ignored), bounce, or unsubscribe. Optionally stops everyone at the same company when one person replies. |
+| **Replies → meetings** | Every reply is sorted (interested, question, not now, not interested, remove me, wrong person). Interested people get a booking link in the same thread a few minutes later; when they pick a time, a calendar invite goes to them and the host and the meeting is recorded. Works with the built-in booking page or your own Calendly / Cal.com / Google link. See [docs/MEETINGS.md](docs/MEETINGS.md). |
+| **Meetings** | One page with every booked call: coming up, held, no-show, canceled, show rate, CSV export for reporting or per-meeting billing. |
 | **Tracking** | Opens (invisible image), clicks (redirect links), replies and bounces (reads each mailbox's inbox). Link scanners and image prefetchers are flagged and excluded. |
 | **Safety** | Mailbox auto-pauses if its bounce rate passes 5%. Global do-not-email list. One-click unsubscribe header. Credentials encrypted at rest. |
 | **Test mode** | Emails captured (Mailpit or the in-app test inbox), fast-forward turns days into minutes, simulate opens/clicks/replies/bounces, or send the whole sequence to yourself through the real mailbox. |
@@ -65,6 +67,7 @@ For development: `npm run dev` and `npm run worker:dev`. Tests: `npm test`.
 - [Connecting mailboxes](docs/CONNECTING_MAILBOXES.md): Google, Google Workspace (admin), Microsoft 365, SMTP
 - [Testing](docs/TESTING.md): test mode, Mailpit, simulations, the pre-launch checklist
 - [Contact sheet format](docs/SHEET_FORMAT.md)
+- [Replies and meetings](docs/MEETINGS.md): reply sorting, booking page, Calendly / Cal.com webhooks
 
 ## Project layout
 

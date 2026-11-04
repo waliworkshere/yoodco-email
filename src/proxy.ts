@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// Public routes: login, tracking endpoints, unsubscribe page, health check.
-const PUBLIC = [/^\/login/, /^\/t\//, /^\/u\//, /^\/api\/health/, /^\/api\/cron\//, /^\/_next\//, /^\/favicon/, /^\/icon/, /^\/logo\.png$/];
+// Public routes: login, tracking endpoints, unsubscribe and booking pages, booking webhooks, health check.
+const PUBLIC = [/^\/login/, /^\/t\//, /^\/u\//, /^\/b\//, /^\/api\/meetings\//, /^\/api\/health/, /^\/api\/cron\//, /^\/_next\//, /^\/favicon/, /^\/icon/, /^\/logo\.png$/];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

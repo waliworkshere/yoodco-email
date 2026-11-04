@@ -2,6 +2,7 @@ import type { Campaign, CampaignMode, Mailbox } from "@prisma/client";
 import { db } from "../db";
 import { effectiveDailyLimit, isInWindow, jitterMs } from "../schedule";
 import { sendNextStep } from "./send";
+import { sendDueBookingReplies } from "./booking-reply";
 
 /**
  * The pacing loop. Called by the worker every few seconds.
@@ -63,7 +64,7 @@ export async function tickCampaign(c: Campaign, mailboxes: Mailbox[], now = new 
 
   if (!fastForward) {
     const lastHour = await db.message.count({
-      where: { campaignId: c.id, status: "SENT", sentAt: { gt: new Date(now.getTime() - HOUR) } },
+      where: { campaignId: c.id, kind: "SEQUENCE", status: "SENT", sentAt: { gt: new Date(now.getTime() - HOUR) } },
     });
     if (lastHour >= c.hourlyLimit) return { campaign: c.name, action: "waiting", reason: `Hourly limit reached (${c.hourlyLimit})` };
   }
@@ -116,8 +117,10 @@ export async function tickCampaign(c: Campaign, mailboxes: Mailbox[], now = new 
 }
 
 export async function tick(now = new Date()): Promise<TickReport[]> {
+  // Booking-link answers go out for any campaign, running or finished: replies keep coming after the last email
+  const answered = await sendDueBookingReplies(now).catch(() => 0);
   const campaigns = await db.campaign.findMany({ where: { status: "RUNNING" }, orderBy: { startedAt: "asc" } });
-  if (!campaigns.length) return [];
+  if (!campaigns.length) return answered ? [{ campaign: "Booking links", action: "sent", reason: `${answered} sent` }] : [];
   const mailboxes = await db.mailbox.findMany();
   const reports: TickReport[] = [];
   for (const c of campaigns) {

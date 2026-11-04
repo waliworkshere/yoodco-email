@@ -30,7 +30,7 @@ export async function EmailsTab({ campaign, sp }: { campaign: Campaign; sp: Reco
                   <td className="nowrap small">{fmtDate(m.sentAt)}</td>
                   <td className="small">{m.toEmail}{m.deliveredTo !== m.toEmail ? <div className="cell-sub">delivered to {m.deliveredTo}</div> : null}</td>
                   <td className="small">{m.fromEmail}</td>
-                  <td className="nowrap">Email {m.step}</td>
+                  <td className="nowrap">{m.kind === "BOOKING_REPLY" ? "Booking link" : m.kind === "INVITE" ? "Calendar invite" : `Email ${m.step}`}</td>
                   <td><Link href={`/campaigns/${campaign.id}/emails/${m.id}`} className="trunc" style={{ display: "inline-block" }}>{m.subject || "(no subject)"}</Link></td>
                   <td className="nowrap">
                     <span className="row" style={{ gap: 4 }}>

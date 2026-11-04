@@ -53,7 +53,8 @@ export async function runFor(instance: string, budgetMs: number, tickMs: number)
         if (r.action !== "waiting") out.reports.push(r);
       }
       const running = await db.campaign.count({ where: { status: "RUNNING" } });
-      if (!running) break;
+      const soon = await db.campaignContact.count({ where: { bookingReplySentAt: null, bookingReplyDueAt: { lte: new Date(startedAt.getTime() + budgetMs) } } });
+      if (!running && !soon) break;
       const wait = Math.max(300, tickMs - (Date.now() - began));
       if (Date.now() - startedAt.getTime() + wait >= budgetMs) break;
       await new Promise((r) => setTimeout(r, wait));

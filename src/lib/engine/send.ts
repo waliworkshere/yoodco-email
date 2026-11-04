@@ -7,6 +7,13 @@ import { classifySendError, deliver, type DeliveryRoute } from "../mail/transpor
 import { stepDelayMs, emailDomain } from "../schedule";
 import { checkMailboxHealth } from "./outcomes";
 
+/** "Yood" from yood.ai, unless COMPANY_NAME is set. */
+export function companyFromEmail(email: string | null | undefined): string {
+  if (env.companyName) return env.companyName;
+  const label = emailDomain(email ?? "").split(".")[0] ?? "";
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
+}
+
 export type EnrollmentWithAll = CampaignContact & {
   contact: Contact;
   mailbox: Mailbox | null;
@@ -41,6 +48,7 @@ export function varsFor(contact: Contact, mailbox: Mailbox | null, extra: unknow
     senderName: sender,
     senderFirstName: sender.split(" ")[0],
     senderEmail: mailbox?.email,
+    senderCompany: companyFromEmail(mailbox?.email),
   };
 }
 

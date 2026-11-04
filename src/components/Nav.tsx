@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCampaigns, IconMailbox, IconOverview, IconSettings } from "./icons";
+import { IconCalendar, IconCampaigns, IconMailbox, IconOverview, IconSettings } from "./icons";
 
 const items = [
   { href: "/", label: "Overview", icon: IconOverview, match: (p: string) => p === "/" },
   { href: "/campaigns", label: "Campaigns", icon: IconCampaigns, match: (p: string) => p.startsWith("/campaigns") },
+  { href: "/meetings", label: "Meetings", icon: IconCalendar, match: (p: string) => p.startsWith("/meetings") },
   { href: "/mailboxes", label: "Mailboxes", icon: IconMailbox, match: (p: string) => p.startsWith("/mailboxes") },
   { href: "/settings", label: "Settings", icon: IconSettings, match: (p: string) => p.startsWith("/settings") },
 ];

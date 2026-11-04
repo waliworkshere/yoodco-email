@@ -2,6 +2,7 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { tickCampaign } from "@/lib/engine/scheduler";
+import { pendingBookingReplies, sendDueBookingReplies } from "@/lib/engine/booking-reply";
 
 /**
  * Advances a running TEST campaign by one scheduler step. Called every few seconds by the
@@ -11,7 +12,9 @@ import { tickCampaign } from "@/lib/engine/scheduler";
 export async function advanceTestRun(campaignId: string): Promise<{ running: boolean }> {
   await requireUser();
   const c = await db.campaign.findUnique({ where: { id: campaignId } });
-  if (!c || c.status !== "RUNNING") return { running: false };
+  if (!c) return { running: false };
+  const waitingReplies = c.mode === "TEST" ? await pendingBookingReplies({ campaignId }) : 0;
+  if (c.status !== "RUNNING" && !waitingReplies) return { running: false };
   if (c.mode !== "TEST") return { running: true };
   const now = new Date();
   // Show the sender as active on the dashboard while a test is being driven from the page
@@ -20,7 +23,8 @@ export async function advanceTestRun(campaignId: string): Promise<{ running: boo
     create: { id: "worker", lastBeat: now, startedAt: now, host: "idle" },
     update: { lastBeat: now },
   });
-  await tickCampaign(c, await db.mailbox.findMany(), now);
+  await sendDueBookingReplies(now, { campaignId });
+  if (c.status === "RUNNING") await tickCampaign(c, await db.mailbox.findMany(), now);
   const after = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true } });
-  return { running: after?.status === "RUNNING" };
+  return { running: after?.status === "RUNNING" || (await pendingBookingReplies({ campaignId })) > 0 };
 }

@@ -4,6 +4,10 @@ import { db } from "../db";
 import { env } from "../env";
 import { imapAuth, openImap, serverSettings } from "../mail/transport";
 import { applyAutoReply, applyBounce, applyReply } from "./outcomes";
+import { cleanReply } from "./intent";
+import { parseInvite } from "../meetings/ics";
+import { bookingToolFromEmail } from "../meetings/webhook";
+import { cancelMeeting, findEnrollment, recordMeeting } from "../meetings/record";
 
 /**
  * Reads each connected mailbox's inbox for replies and bounces.
@@ -50,8 +54,68 @@ async function findOurMessage(mailboxId: string, ids: string[]) {
   return db.message.findFirst({ where: { messageIdHeader: { in: ids }, status: "SENT" }, orderBy: { sentAt: "desc" } });
 }
 
-export async function scanMailbox(m: Mailbox): Promise<{ checked: number; replies: number; bounces: number }> {
-  const result = { checked: 0, replies: 0, bounces: 0 };
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+
+/**
+ * Calendar invitations and booking-tool notifications that land in a connected inbox:
+ * a prospect sending an invite, or Calendly / Cal.com telling the host someone booked.
+ * Returns how many meetings were recorded.
+ */
+export async function detectMeetings(
+  parsed: { attachments?: { contentType?: string; filename?: string; content: Buffer }[]; text?: string; subject?: string; messageId?: string },
+  from: string,
+  ownAddresses: Set<string>,
+): Promise<number> {
+  let found = 0;
+  const ics = (parsed.attachments ?? []).find((a) => /text\/calendar/i.test(a.contentType ?? "") || /\.ics$/i.test(a.filename ?? ""));
+  if (ics) {
+    const inv = parseInvite(ics.content.toString("utf8"));
+    // Our own invites (UID …@yood-outreach) are already recorded
+    if (inv && inv.uid && !inv.uid.endsWith("@yood-outreach")) {
+      const people = [inv.organizer, ...inv.attendees].filter((e): e is string => Boolean(e) && !ownAddresses.has(e!));
+      if (inv.method === "CANCEL" || inv.status === "CANCELLED") {
+        const existing = await db.meeting.findUnique({ where: { externalId: `ics:${inv.uid}` } });
+        if (existing) await cancelMeeting(existing, "Canceled in the calendar");
+        return 0;
+      }
+      if (inv.method === "REQUEST" || inv.method === "PUBLISH" || inv.method === "") {
+        for (const email of people) {
+          const cc = await findEnrollment(null, email);
+          if (!cc) continue;
+          await recordMeeting({
+            source: "CALENDAR_INVITE",
+            email,
+            title: inv.summary,
+            startsAt: inv.start,
+            endsAt: inv.end,
+            location: inv.location,
+            externalId: `ics:${inv.uid}`,
+            enrollment: cc,
+          });
+          found++;
+          break;
+        }
+      }
+    }
+    return found;
+  }
+  const tool = bookingToolFromEmail(from, parsed.subject ?? "");
+  if (tool) {
+    const emails = [...new Set((parsed.text ?? "").match(EMAIL_RE) ?? [])].map((e) => e.toLowerCase()).filter((e) => !ownAddresses.has(e) && !/calendly|cal\.com|google\.com|hubspot|noreply|no-reply/.test(e));
+    for (const email of emails) {
+      const cc = await findEnrollment(null, email);
+      if (!cc) continue;
+      await recordMeeting({ source: tool, email, title: parsed.subject ?? null, externalId: `mail:${parsed.messageId ?? email}`, enrollment: cc });
+      found++;
+      break;
+    }
+  }
+  return found;
+}
+
+export async function scanMailbox(m: Mailbox): Promise<{ checked: number; replies: number; bounces: number; meetings: number }> {
+  const result = { checked: 0, replies: 0, bounces: 0, meetings: 0 };
+  const ownAddresses = new Set((await db.mailbox.findMany({ select: { email: true } })).map((x) => x.email.toLowerCase()));
   const s = serverSettings(m);
   if (m.provider === "SANDBOX" || !s.imapHost) return result;
 
@@ -98,6 +162,10 @@ export async function scanMailbox(m: Mailbox): Promise<{ checked: number; replie
           continue;
         }
 
+        const meetings = await detectMeetings(parsed, from, ownAddresses);
+        result.meetings += meetings;
+        if (meetings && bookingToolFromEmail(from, subject)) continue; // a notification, not a reply
+
         const ids = [...parseIds(parsed.inReplyTo), ...parseIds(parsed.references)];
         let ours = await findOurMessage(m.id, ids);
         if (!ours && from) {
@@ -111,7 +179,12 @@ export async function scanMailbox(m: Mailbox): Promise<{ checked: number; replie
         if (looksAutomatic(parsed.headers, subject)) {
           await applyAutoReply(ours, subject);
         } else {
-          await applyReply(ours, { detail: snippet || subject, at: parsed.date ?? new Date() });
+          await applyReply(ours, {
+            detail: snippet || subject,
+            text: cleanReply(parsed.text ?? "") || subject,
+            replyMessageId: parsed.messageId ?? null,
+            at: parsed.date ?? new Date(),
+          });
           result.replies++;
         }
       }

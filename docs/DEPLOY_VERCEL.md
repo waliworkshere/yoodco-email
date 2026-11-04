@@ -23,6 +23,9 @@
   process running. Set `CRON_SECRET` in Vercel, then create a free job at cron-job.org (or any scheduler)
   that calls `https://<your-project>.vercel.app/api/cron/tick` every minute with the header
   `Authorization: Bearer <CRON_SECRET>`. Each call sends for about 50 seconds.
+  The repository also includes `.github/workflows/sender.yml`, which does the same every 5 minutes once
+  `APP_URL` and `CRON_SECRET` are added as GitHub Actions secrets (a backup, or enough for small volumes).
+  Each call also reads replies, sends booking links and records meetings.
   On a regular server, run `npm run worker` instead.
 
 Remove the demo login (Settings → Team) before sending real email.

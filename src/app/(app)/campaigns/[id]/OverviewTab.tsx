@@ -77,8 +77,8 @@ export async function OverviewTab({ campaign }: { campaign: Campaign & { steps: 
         <Kpi label="Opened" value={fmtPct(people.opened, people.contacted)} sub={`${fmtNum(people.opened)} people`} />
         <Kpi label="Clicked" value={fmtPct(people.clicked, people.contacted)} sub={`${fmtNum(people.clicked)} people`} />
         <Kpi label="Replied" value={fmtPct(people.replied, people.contacted)} sub={`${fmtNum(people.replied)} people`} />
+        <Kpi label="Meetings" value={fmtNum(people.meetings)} sub={people.replied ? `from ${fmtNum(people.replied)} replies` : "booked"} highlight />
         <Kpi label="Bounced" value={fmtPct(people.bounced, people.contacted)} sub={`${fmtNum(people.bounced)} addresses`} />
-        <Kpi label="Unsubscribed" value={fmtNum(people.unsubscribed)} />
       </div>
 
       <div className="grid-2">
@@ -95,6 +95,7 @@ export async function OverviewTab({ campaign }: { campaign: Campaign & { steps: 
                 { label: "Opened", value: people.opened },
                 { label: "Clicked", value: people.clicked },
                 { label: "Replied", value: people.replied },
+                { label: "Booked a meeting", value: people.meetings },
               ]}
             />
             <p className="small muted" style={{ marginTop: 14 }}>

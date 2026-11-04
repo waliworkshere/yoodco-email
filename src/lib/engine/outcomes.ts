@@ -1,7 +1,9 @@
 import type { Message } from "@prisma/client";
 import { db } from "../db";
 import { env } from "../env";
-import { emailDomain, PUBLIC_EMAIL_DOMAINS } from "../schedule";
+import { emailDomain, jitterMs, PUBLIC_EMAIL_DOMAINS } from "../schedule";
+import type { ReplyIntent } from "@prisma/client";
+import { classifyReply } from "./intent";
 
 /**
  * What happens when a person replies, an email bounces, or someone unsubscribes.
@@ -10,7 +12,25 @@ import { emailDomain, PUBLIC_EMAIL_DOMAINS } from "../schedule";
 
 const OPEN_STATUSES = ["QUEUED", "ACTIVE"] as const;
 
-export async function applyReply(message: Message, opts: { detail?: string; at?: Date } = {}) {
+export interface ReplyInput {
+  detail?: string;
+  at?: Date;
+  /** What the person wrote (quoted history removed); used to work out what they want. */
+  text?: string;
+  /** Message-ID header of their reply, so the booking link goes out in the same thread. */
+  replyMessageId?: string | null;
+  /** Skip classification (simulations and teammates set it directly). */
+  intent?: ReplyIntent;
+}
+
+/** How long to wait before answering an interested reply with the booking link. */
+export function bookingReplyDelayMs(c: { mode: string; testFastForward: boolean; bookingReplyMinDelay: number; bookingReplyMaxDelay: number }) {
+  if (c.mode === "TEST" && c.testFastForward) return jitterMs(5, 15);
+  const min = Math.max(0, c.bookingReplyMinDelay);
+  return jitterMs(min * 60, Math.max(min, c.bookingReplyMaxDelay) * 60);
+}
+
+export async function applyReply(message: Message, opts: ReplyInput = {}) {
   const at = opts.at ?? new Date();
   const cc = await db.campaignContact.findUnique({
     where: { id: message.campaignContactId },
@@ -19,6 +39,9 @@ export async function applyReply(message: Message, opts: { detail?: string; at?:
   if (!cc) return;
   if (message.repliedAt) return; // already processed
 
+  const text = (opts.text ?? opts.detail ?? "").trim();
+  const { intent, by } = opts.intent ? { intent: opts.intent, by: "person" } : await classifyReply(text);
+
   await db.message.update({ where: { id: message.id }, data: { repliedAt: at } });
   await db.event.create({
     data: {
@@ -26,18 +49,33 @@ export async function applyReply(message: Message, opts: { detail?: string; at?:
       campaignId: cc.campaignId,
       campaignContactId: cc.id,
       messageId: message.id,
-      detail: opts.detail?.slice(0, 500),
+      detail: (opts.detail ?? text)?.slice(0, 500),
       createdAt: at,
     },
   });
 
-  if (cc.campaign.stopOnReply) {
+  const wantsLink =
+    intent === "INTERESTED" && cc.campaign.autoBookingReply && cc.campaign.bookingMode !== "OFF" && !cc.meetingBookedAt && !cc.bookingReplySentAt;
+  const replyFields = {
+    replyText: text.slice(0, 4000) || null,
+    replyMessageId: opts.replyMessageId ?? null,
+    replyIntent: intent,
+    replyIntentBy: by,
+    ...(wantsLink ? { bookingReplyDueAt: new Date(at.getTime() + bookingReplyDelayMs(cc.campaign)) } : {}),
+  };
+
+  if (intent === "UNSUBSCRIBE") {
+    // "Please remove me" is honoured like the unsubscribe link
+    await db.campaignContact.update({ where: { id: cc.id }, data: { ...replyFields, status: "UNSUBSCRIBED", repliedAt: at, nextStepAt: null } });
+    if (message.mode === "LIVE") await db.contact.update({ where: { id: cc.contactId }, data: { unsubscribedAt: cc.contact.unsubscribedAt ?? at } });
+    await db.event.create({ data: { type: "UNSUBSCRIBE", campaignId: cc.campaignId, campaignContactId: cc.id, messageId: message.id, detail: "Asked to be removed in a reply" } });
+  } else if (cc.campaign.stopOnReply && cc.status !== "MEETING") {
     await db.campaignContact.update({
       where: { id: cc.id },
-      data: { status: "REPLIED", repliedAt: at, nextStepAt: null },
+      data: { ...replyFields, status: "REPLIED", repliedAt: at, nextStepAt: null },
     });
-  } else if (!cc.repliedAt) {
-    await db.campaignContact.update({ where: { id: cc.id }, data: { repliedAt: at } });
+  } else {
+    await db.campaignContact.update({ where: { id: cc.id }, data: { ...replyFields, repliedAt: cc.repliedAt ?? at } });
   }
 
   // Stop the sequence for colleagues at the same company

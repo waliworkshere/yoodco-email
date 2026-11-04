@@ -40,13 +40,37 @@ const EXAMPLE_NAME = "Example · SaaS founders (sample data)";
 const EX_FIRST = ["Maya", "Felix", "Lara", "Hugo", "Iris", "Dev", "Nina", "Oscar", "Tara", "Eli", "Vera", "Sami", "Anya", "Remy", "Lina", "Theo", "Jade", "Owen", "Mila", "Arjun"];
 const EX_LAST = ["Laurent", "Sato", "Moreau", "Jansen", "Rossi", "Kowalski", "Hart", "Silva", "Brandt", "Nakamura", "Ferreira", "Dubois", "Lund", "Okoye", "Varga"];
 const EX_COMPANIES = ["Woodgrove", "Lucerne", "Coho", "Margie", "Alpine Ski", "Blue Yonder", "Trey Research", "Humongous", "Wide World", "Relecloud", "Fourth Coffee", "Graphic Design"];
-const REPLIES = ["Sounds interesting. Thursday works for me.", "Send me two or three slots next week.", "Not right now, check back in Q1.", "Yes, happy to talk.", "Can you share a case study first?"];
+const REPLIES: [string, "INTERESTED" | "NOT_NOW" | "QUESTION" | "NOT_INTERESTED"][] = [
+  ["Sounds interesting. Thursday works for me.", "INTERESTED"],
+  ["Send me two or three slots next week.", "INTERESTED"],
+  ["Not right now, check back in Q1.", "NOT_NOW"],
+  ["Yes, happy to talk.", "INTERESTED"],
+  ["Can you share a case study first?", "QUESTION"],
+  ["Open to a quick call. What does your calendar look like?", "INTERESTED"],
+  ["Thanks, but we're all set for now.", "NOT_INTERESTED"],
+];
+const BOOKING_TEXT = (first: string, sender: string) =>
+  `Hi ${first},\n\nGreat to hear from you. Here's a link to pick a time that suits you: https://yoodco-email.vercel.app/b/example\n\nIf none of those times work, just reply with a couple that do and I'll send an invite.\n\nThanks,\n${sender}`;
+
+/** A weekday at 10:00–16:00 Chicago time, `days` after `from`. */
+function meetingTime(from: number, days: number): Date {
+  const d = new Date(from + days * 86_400_000);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCHours(15 + Math.floor(rand() * 6), rand() < 0.5 ? 0 : 30, 0, 0); // 15:00–20:30 UTC ≈ 10:00–15:30 CST
+  return d;
+}
 
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => v[k] ?? "");
 
 /** A finished live-mode campaign with two weeks of results, clearly named as sample data. */
 async function seedExampleHistory(mailboxes: { id: string; email: string; displayName: string }[]) {
-  if (await db.campaign.findFirst({ where: { name: EXAMPLE_NAME } })) return;
+  const existing = await db.campaign.findFirst({ where: { name: EXAMPLE_NAME } });
+  // Reseed sample data made before meetings existed
+  if (existing && (await db.meeting.count({ where: { campaignId: existing.id } })) > 0) return;
+  if (existing) {
+    await db.meeting.deleteMany({ where: { campaignId: existing.id } });
+    await db.campaign.delete({ where: { id: existing.id } });
+  }
   const now = Date.now();
   const DAY = 86_400_000;
   const campaign = await db.campaign.create({
@@ -54,6 +78,8 @@ async function seedExampleHistory(mailboxes: { id: string; email: string; displa
       name: EXAMPLE_NAME,
       mode: "LIVE",
       status: "COMPLETED",
+      timezone: "America/Chicago",
+      meetingLocation: "https://meet.google.com/abc-defg-hij",
       startedAt: new Date(now - 14 * DAY),
       completedAt: new Date(now - 2 * 3600_000),
       steps: { create: STEPS.map((s, i) => ({ order: i + 1, delayDays: [0, 3, 4][i], subject: s.subject, body: s.body })) },
@@ -62,6 +88,7 @@ async function seedExampleHistory(mailboxes: { id: string; email: string; displa
   });
 
   const messages: Prisma.MessageCreateManyInput[] = [];
+  const meetings: Prisma.MeetingCreateManyInput[] = [];
   const events: Prisma.EventCreateManyInput[] = [];
   let n = 0;
   for (let i = 0; i < 168; i++) {
@@ -75,9 +102,12 @@ async function seedExampleHistory(mailboxes: { id: string; email: string; displa
 
     // ~24 new people per weekday, starting 14 days ago; follow-ups 3 and 4 days later
     let t = now - (14 - Math.floor(i / 24)) * DAY + (2 + rand() * 6) * 3600_000;
-    let status: "COMPLETED" | "REPLIED" | "BOUNCED" | "UNSUBSCRIBED" = "COMPLETED";
+    let status: "COMPLETED" | "REPLIED" | "BOUNCED" | "UNSUBSCRIBED" | "MEETING" = "COMPLETED";
     let step = 0;
     let repliedAt: Date | null = null;
+    let reply: (typeof REPLIES)[number] | null = null;
+    let linkAt: Date | null = null;
+    let meeting: Prisma.MeetingCreateManyInput | null = null;
     for (let st = 1; st <= 3; st++) {
       if (t > now - 3600_000) break;
       step = st;
@@ -105,12 +135,39 @@ async function seedExampleHistory(mailboxes: { id: string; email: string; displa
           events.push({ type: "CLICK", campaignId: campaign.id, campaignContactId: cc.id, messageId: id, url: m.links[0], userAgent: "Mozilla/5.0", createdAt: m.firstClickedAt });
         }
       }
-      if (rand() < 0.022) {
+      if (rand() < 0.02) {
         const at = new Date(t + (1 + rand() * 20) * 3600_000);
         if (at.getTime() < now) {
           m.repliedAt = at; repliedAt = at; status = "REPLIED";
-          events.push({ type: "REPLY", campaignId: campaign.id, campaignContactId: cc.id, messageId: id, detail: REPLIES[Math.floor(rand() * REPLIES.length)], createdAt: at });
-          messages.push(m); break;
+          reply = REPLIES[Math.floor(rand() * REPLIES.length)];
+          events.push({ type: "REPLY", campaignId: campaign.id, campaignContactId: cc.id, messageId: id, detail: reply[0], createdAt: at });
+          messages.push(m);
+          if (reply[1] === "INTERESTED" && at.getTime() + 600_000 < now) {
+            // The booking link goes out a few minutes later, in the same thread
+            linkAt = new Date(at.getTime() + (4 + rand() * 8) * 60_000);
+            const lid = `ex${campaign.id.slice(-6)}m${n++}`;
+            const text = BOOKING_TEXT(first, mb.displayName.split(" ")[0]);
+            messages.push({
+              id: lid, token: `ex-${lid}`, campaignId: campaign.id, campaignContactId: cc.id, mailboxId: mb.id, step: st, kind: "BOOKING_REPLY", mode: "LIVE", status: "SENT",
+              messageIdHeader: `<${lid}@yood.ai>`, fromEmail: mb.email, toEmail: email, deliveredTo: email, subject: `Re: ${STEPS[st - 1].subject}`,
+              bodyText: text, bodyHtml: `<p>${text.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`, links: [], sentAt: linkAt,
+            });
+            events.push({ type: "BOOKING_LINK_SENT", campaignId: campaign.id, campaignContactId: cc.id, messageId: lid, createdAt: linkAt });
+            if (rand() < 0.7) {
+              const bookedAt = new Date(Math.min(now - 60_000, linkAt.getTime() + (0.3 + rand() * 18) * 3600_000));
+              const startsAt = meetingTime(bookedAt.getTime(), 1 + Math.floor(rand() * 5));
+              const past = startsAt.getTime() < now;
+              meeting = {
+                campaignId: campaign.id, campaignContactId: cc.id, mode: "LIVE", source: "BOOKING_PAGE",
+                status: past ? (rand() < 0.85 ? "HELD" : "NO_SHOW") : "BOOKED",
+                email, name: `${first} ${last}`, company, title: `Intro call: ${company} × Yood`, startsAt, endsAt: new Date(startsAt.getTime() + 30 * 60_000),
+                hostEmail: mb.email, location: "https://meet.google.com/abc-defg-hij", createdAt: bookedAt,
+              };
+              status = "MEETING";
+              events.push({ type: "MEETING", campaignId: campaign.id, campaignContactId: cc.id, detail: `Booking page · ${new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(startsAt)}`, createdAt: bookedAt });
+            }
+          }
+          break;
         }
       }
       if (rand() < 0.006) {
@@ -121,11 +178,21 @@ async function seedExampleHistory(mailboxes: { id: string; email: string; displa
       messages.push(m);
       if (st < 3) t += [0, 3, 4][st] * DAY;
     }
-    await db.campaignContact.update({ where: { id: cc.id }, data: { status, currentStep: step, repliedAt } });
+    await db.campaignContact.update({
+      where: { id: cc.id },
+      data: {
+        status, currentStep: step, repliedAt,
+        ...(reply ? { replyText: reply[0], replyIntent: reply[1], replyIntentBy: "rules" } : {}),
+        ...(linkAt ? { bookingReplySentAt: linkAt } : {}),
+        ...(meeting ? { meetingBookedAt: meeting.createdAt as Date } : {}),
+      },
+    });
+    if (meeting) meetings.push(meeting);
   }
   await db.message.createMany({ data: messages });
   await db.event.createMany({ data: events });
-  console.log(`Example history ready: ${messages.length} sample emails.`);
+  await db.meeting.createMany({ data: meetings });
+  console.log(`Example history ready: ${messages.length} sample emails, ${meetings.length} meetings.`);
 }
 
 async function main() {
@@ -155,6 +222,8 @@ async function main() {
       name: "Demo · Sequence 1 (fictional contacts)",
       mode: "TEST",
       testFastForward: true,
+      timezone: "America/Chicago",
+      meetingLocation: "https://meet.google.com/abc-defg-hij",
       steps: { create: STEPS.map((s, i) => ({ order: i + 1, delayDays: [0, 3, 4][i], subject: s.subject, body: s.body })) },
       importReport: { fileName: "demo (generated)", imported: PEOPLE.length, stepCount: 3, invalid: [], invalidCount: 0, duplicates: 0, suppressed: 0, unassigned: 0, senders: [], columns: [] },
     },

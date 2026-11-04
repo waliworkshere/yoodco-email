@@ -5,7 +5,17 @@ import { simulate, stopContact } from "@/app/actions/campaigns";
 import { Empty, EnrollmentBadge, enrollmentLabel, fmtDate, fmtNum } from "@/components/ui";
 
 const PAGE = 50;
-const STATUSES: EnrollmentStatus[] = ["QUEUED", "ACTIVE", "COMPLETED", "REPLIED", "BOUNCED", "UNSUBSCRIBED", "STOPPED", "FAILED"];
+const SIMULATIONS = [
+  ["open", "An open"],
+  ["click", "A click"],
+  ["reply", "An interested reply"],
+  ["reply_question", "A question"],
+  ["reply_not", "A not-interested reply"],
+  ["reply_unsub", "\"Please remove me\""],
+  ["meeting", "A meeting booking"],
+  ["bounce", "A bounce"],
+] as const;
+const STATUSES: EnrollmentStatus[] = ["QUEUED", "ACTIVE", "COMPLETED", "REPLIED", "MEETING", "BOUNCED", "UNSUBSCRIBED", "STOPPED", "FAILED"];
 
 export async function ContactsTab({ campaign, sp }: { campaign: Campaign & { steps: CampaignStep[] }; sp: Record<string, string> }) {
   const id = campaign.id;
@@ -94,12 +104,12 @@ export async function ContactsTab({ campaign, sp }: { campaign: Campaign & { ste
                           {isTest && r.currentStep > 0 ? (
                             <>
                               <span className="menu-label">Simulate (test only)</span>
-                              {(["open", "click", "reply", "bounce"] as const).map((w) => (
+                              {SIMULATIONS.map(([w, label]) => (
                                 <form action={simulate} key={w}>
                                   <input type="hidden" name="ccId" value={r.id} />
                                   <input type="hidden" name="what" value={w} />
                                   <input type="hidden" name="back" value={back} />
-                                  <button className="menu-item" type="submit">{w === "open" ? "An open" : w === "click" ? "A click" : w === "reply" ? "A reply" : "A bounce"}</button>
+                                  <button className="menu-item" type="submit">{label}</button>
                                 </form>
                               ))}
                             </>

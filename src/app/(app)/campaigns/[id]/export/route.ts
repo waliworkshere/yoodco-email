@@ -15,16 +15,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!c) return new Response("Not found", { status: 404 });
   const rows = await db.campaignContact.findMany({
     where: { campaignId: id },
-    include: { contact: true, mailbox: true, messages: { where: { status: "SENT" } } },
+    include: { contact: true, mailbox: true, messages: { where: { status: "SENT", kind: "SEQUENCE" } }, meetings: { orderBy: { createdAt: "desc" }, take: 1 } },
     orderBy: { createdAt: "asc" },
   });
-  const header = ["email", "firstName", "lastName", "company", "sender", "status", "emailsSent", "firstOpenedAt", "firstClickedAt", "repliedAt", "bounced", "unsubscribed", "stoppedReason"];
+  const header = ["email", "firstName", "lastName", "company", "sender", "status", "emailsSent", "firstOpenedAt", "firstClickedAt", "repliedAt", "replyType", "reply", "bookingLinkSentAt", "meetingStatus", "meetingAt", "bounced", "unsubscribed", "stoppedReason"];
   const lines = [header.join(",")];
   for (const r of rows) {
     const opened = r.messages.map((m) => m.firstOpenedAt).filter(Boolean).sort()[0] ?? null;
     const clicked = r.messages.map((m) => m.firstClickedAt).filter(Boolean).sort()[0] ?? null;
     lines.push(
-      [r.contact.email, r.contact.firstName, r.contact.lastName, r.contact.company, r.mailbox?.email ?? r.senderEmail, r.status, r.messages.length, opened, clicked, r.repliedAt, r.status === "BOUNCED", r.status === "UNSUBSCRIBED", r.stoppedReason]
+      [r.contact.email, r.contact.firstName, r.contact.lastName, r.contact.company, r.mailbox?.email ?? r.senderEmail, r.status, r.messages.length, opened, clicked, r.repliedAt, r.replyIntent, r.replyText, r.bookingReplySentAt, r.meetings[0]?.status, r.meetings[0]?.startsAt, r.status === "BOUNCED", r.status === "UNSUBSCRIBED", r.stoppedReason]
         .map(esc)
         .join(","),
     );

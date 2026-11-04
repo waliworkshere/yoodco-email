@@ -20,7 +20,7 @@ export const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
 export const fmtPct = (n: number, d: number) => (d > 0 ? `${pct(n, d).toFixed(1)}%` : "–");
 
 export async function messageFunnel(where: Prisma.MessageWhereInput): Promise<Funnel> {
-  const base = { ...where, status: "SENT" as const };
+  const base = { kind: "SEQUENCE" as const, ...where, status: "SENT" as const };
   const [sent, bounced, opened, clicked, replied, unsubscribed] = await Promise.all([
     db.message.count({ where: base }),
     db.message.count({ where: { ...base, bouncedAt: { not: null } } }),
@@ -34,7 +34,7 @@ export async function messageFunnel(where: Prisma.MessageWhereInput): Promise<Fu
 
 /** Contact-level outcome: how many people (not emails) opened, clicked, replied. */
 export async function peopleFunnel(campaignId: string) {
-  const [enrolled, contacted, opened, clicked, replied, bounced, unsubscribed] = await Promise.all([
+  const [enrolled, contacted, opened, clicked, replied, bounced, unsubscribed, meetings] = await Promise.all([
     db.campaignContact.count({ where: { campaignId } }),
     db.campaignContact.count({ where: { campaignId, currentStep: { gt: 0 } } }),
     db.campaignContact.count({ where: { campaignId, messages: { some: { firstOpenedAt: { not: null } } } } }),
@@ -42,8 +42,26 @@ export async function peopleFunnel(campaignId: string) {
     db.campaignContact.count({ where: { campaignId, repliedAt: { not: null } } }),
     db.campaignContact.count({ where: { campaignId, status: "BOUNCED" } }),
     db.campaignContact.count({ where: { campaignId, status: "UNSUBSCRIBED" } }),
+    db.campaignContact.count({ where: { campaignId, meetingBookedAt: { not: null } } }),
   ]);
-  return { enrolled, contacted, opened, clicked, replied, bounced, unsubscribed };
+  return { enrolled, contacted, opened, clicked, replied, bounced, unsubscribed, meetings };
+}
+
+/** Meetings booked, by outcome. `where` filters meetings (campaign, mode, dates). */
+export async function meetingCounts(where: Prisma.MeetingWhereInput) {
+  const rows = await db.meeting.groupBy({ by: ["status"], where, _count: { _all: true } });
+  const n = (s: string) => rows.find((r) => r.status === s)?._count._all ?? 0;
+  return { booked: n("BOOKED") + n("HELD") + n("NO_SHOW"), upcoming: n("BOOKED"), held: n("HELD"), noShow: n("NO_SHOW"), canceled: n("CANCELED") };
+}
+
+/** Reply outcomes for a campaign: how many were interested, how many got the link, how many booked. */
+export async function replyBreakdown(campaignId: string) {
+  const [intents, linkSent, booked] = await Promise.all([
+    db.campaignContact.groupBy({ by: ["replyIntent"], where: { campaignId, repliedAt: { not: null } }, _count: { _all: true } }),
+    db.campaignContact.count({ where: { campaignId, bookingReplySentAt: { not: null } } }),
+    db.campaignContact.count({ where: { campaignId, meetingBookedAt: { not: null } } }),
+  ]);
+  return { intents: Object.fromEntries(intents.map((r) => [r.replyIntent ?? "OTHER", r._count._all])) as Record<string, number>, linkSent, booked };
 }
 
 export async function statusCounts(campaignId: string) {
@@ -78,7 +96,7 @@ export async function dailySends(where: Prisma.MessageWhereInput, days = 14) {
   const since = new Date(Date.now() - (days - 1) * 86_400_000);
   since.setUTCHours(0, 0, 0, 0);
   const msgs = await db.message.findMany({
-    where: { ...where, status: "SENT", sentAt: { gte: since } },
+    where: { kind: "SEQUENCE", ...where, status: "SENT", sentAt: { gte: since } },
     select: { sentAt: true, step: true },
   });
   const series: { date: string; byStep: Record<number, number>; total: number }[] = [];

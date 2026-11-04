@@ -53,12 +53,40 @@ const ENROLLMENT: Record<string, [Tone, string]> = {
   UNSUBSCRIBED: ["warn", "Unsubscribed"],
   STOPPED: ["warn", "Stopped"],
   FAILED: ["bad", "Failed"],
+  MEETING: ["good", "Meeting booked"],
 };
 export const EnrollmentBadge = ({ status }: { status: string }) => {
   const [tone, label] = ENROLLMENT[status] ?? ["neutral", status];
   return <Badge tone={tone}>{label}</Badge>;
 };
 export const enrollmentLabel = (s: string) => ENROLLMENT[s]?.[1] ?? s;
+
+const INTENT: Record<string, [Tone, string]> = {
+  INTERESTED: ["good", "Interested"],
+  QUESTION: ["info", "Has a question"],
+  NOT_NOW: ["warn", "Not right now"],
+  NOT_INTERESTED: ["neutral", "Not interested"],
+  UNSUBSCRIBE: ["bad", "Asked to be removed"],
+  WRONG_PERSON: ["neutral", "Wrong person"],
+  OTHER: ["neutral", "Other"],
+};
+export const IntentBadge = ({ intent }: { intent: string | null | undefined }) => {
+  if (!intent) return <span className="muted small">–</span>;
+  const [tone, label] = INTENT[intent] ?? ["neutral", intent];
+  return <Badge tone={tone} plain>{label}</Badge>;
+};
+export const intentLabel = (s: string) => INTENT[s]?.[1] ?? s;
+
+const MEETING: Record<string, [Tone, string]> = {
+  BOOKED: ["info", "Booked"],
+  HELD: ["good", "Held"],
+  NO_SHOW: ["warn", "No-show"],
+  CANCELED: ["neutral", "Canceled"],
+};
+export const MeetingStatusBadge = ({ status }: { status: string }) => {
+  const [tone, label] = MEETING[status] ?? ["neutral", status];
+  return <Badge tone={tone}>{label}</Badge>;
+};
 
 const MAILBOX: Record<string, [Tone, string]> = {
   ACTIVE: ["good", "Active"],
@@ -104,9 +132,9 @@ export function Flash({ sp }: { sp: Record<string, string | string[] | undefined
   );
 }
 
-export function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+export function Kpi({ label, value, sub, highlight }: { label: string; value: ReactNode; sub?: ReactNode; highlight?: boolean }) {
   return (
-    <div className="kpi">
+    <div className={highlight ? "kpi highlight" : "kpi"}>
       <span className="k">{label}</span>
       <span className="v">{value}</span>
       {sub ? <span className="s">{sub}</span> : null}

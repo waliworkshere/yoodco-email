@@ -34,7 +34,7 @@ export default async function EmailPreview({ params, searchParams }: { params: P
     <>
       <div className="page-head">
         <div className="title">
-          <span className="crumbs"><Link href="/campaigns">Campaigns</Link> / <Link href={`/campaigns/${id}?tab=emails`}>{m.campaign.name}</Link> / Email {m.step}</span>
+          <span className="crumbs"><Link href="/campaigns">Campaigns</Link> / <Link href={`/campaigns/${id}?tab=emails`}>{m.campaign.name}</Link> / {m.kind === "BOOKING_REPLY" ? "Booking link reply" : m.kind === "INVITE" ? "Calendar invite" : `Email ${m.step}`}</span>
           <div className="title-row"><h1 className="trunc" style={{ maxWidth: 680 }}>{m.subject || "(no subject)"}</h1>{m.mode === "TEST" ? <Badge tone="test" plain>Test</Badge> : null}</div>
         </div>
       </div>

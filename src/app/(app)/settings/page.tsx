@@ -19,6 +19,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ]);
   const isAdmin = me.role === "ADMIN";
 
+  const webhook = env.meetingWebhookKey ? `${env.appUrl}/api/meetings/${env.meetingWebhookKey}` : "";
   return (
     <>
       <div className="page-head"><div className="title"><h1>Settings</h1></div></div>
@@ -33,7 +34,26 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <dt>Test mail catcher</dt><dd>{env.sandboxSmtpUrl ? <span className="mono">{env.sandboxSmtpUrl}</span> : <span className="muted">Not configured: test emails are kept in the app only</span>}</dd>
             <dt>Google sign-in</dt><dd>{env.google.oauthConfigured ? <Badge tone="good">Set up</Badge> : <Badge>Not set up</Badge>} {env.google.dwdConfigured ? <Badge tone="good">Workspace admin set up</Badge> : null}</dd>
             <dt>Microsoft sign-in</dt><dd>{env.microsoft.configured ? <Badge tone="good">Set up</Badge> : <Badge>Not set up</Badge>}</dd>
+            <dt>Reading replies</dt><dd>{process.env.ANTHROPIC_API_KEY ? <Badge tone="good">AI</Badge> : <Badge>Built-in rules</Badge>} <span className="muted small">{process.env.ANTHROPIC_API_KEY ? "Replies are read by an AI model, with the rules as a fallback." : "Add ANTHROPIC_API_KEY to have replies read by AI."}</span></dd>
+            <dt>Live sending schedule</dt><dd>{process.env.CRON_SECRET ? <Badge tone="good">Ready</Badge> : <Badge tone="warn">CRON_SECRET not set</Badge>} <span className="muted small">A scheduler calls {env.appUrl}/api/cron/tick every minute (see docs/DEPLOY_VERCEL.md).</span></dd>
           </dl>
+        </div>
+      </section>
+
+      <section className="card" id="calendar-tools">
+        <div className="card-head"><h2>Calendar tools</h2><p>Only needed if a campaign uses your own booking link. The built-in booking page records meetings by itself.</p></div>
+        <div className="card-body stack" style={{ gap: 14 }}>
+          <div className="field">
+            <span className="label">Booking webhook address</span>
+            {webhook ? <code className="mono copyable">{webhook}</code> : <span className="muted">Set MEETING_WEBHOOK_KEY (any long random text) to get an address.</span>}
+            <span className="hint">Keep it private: anyone with this address can record a meeting.</span>
+          </div>
+          <ul className="small stack" style={{ gap: 8, paddingLeft: 18, margin: 0 }}>
+            <li><b>Calendly</b> (Standard plan or higher): Integrations → Webhooks → New webhook, paste the address, choose <i>Invitee created</i> and <i>Invitee canceled</i>.</li>
+            <li><b>Cal.com</b>: Settings → Developer → Webhooks → New, paste the address, choose <i>Booking created</i> and <i>Booking cancelled</i>.</li>
+            <li><b>Google appointment schedule, HubSpot or anything else</b>: in Zapier or Make, send a POST with <code>email</code>, <code>name</code> and <code>startTime</code> to the address.</li>
+            <li>Without a webhook, invitations and &quot;New event&quot; emails that reach a connected mailbox are recognised too.</li>
+          </ul>
         </div>
       </section>
 

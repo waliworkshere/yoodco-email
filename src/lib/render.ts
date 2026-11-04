@@ -27,7 +27,7 @@ export function missingPlaceholders(template: string, vars: Vars): string[] {
       .map(([k]) => k.toLowerCase()),
   );
   for (const m of template.matchAll(/\{\{\s*([\w.-]+)\s*(\|[^}]*)?\}\}/g)) {
-    if (!m[2] && !keys.has(m[1].toLowerCase()) && m[1].toLowerCase() !== "unsubscribeurl") missing.add(m[1]);
+    if (!m[2] && !keys.has(m[1].toLowerCase()) && !["unsubscribeurl", "bookinglink", "bookingurl"].includes(m[1].toLowerCase())) missing.add(m[1]);
   }
   return [...missing];
 }
@@ -68,7 +68,8 @@ export interface RenderedEmail {
 
 export function renderEmail(subjectTpl: string, bodyTpl: string, vars: Vars, opts: RenderOptions): RenderedEmail {
   const unsubscribeUrl = `${opts.appUrl}/u/${opts.token}`;
-  const allVars = { ...vars, unsubscribeUrl };
+  const bookingLink = `${opts.appUrl}/b/${opts.token}`;
+  const allVars = { ...vars, unsubscribeUrl, bookingLink, bookingUrl: bookingLink };
 
   const subject = fillTemplate(subjectTpl, allVars).replace(/\s+/g, " ").trim();
   let body = fillTemplate(bodyTpl, allVars).replace(/\r\n/g, "\n").replace(/\s+$/, "");

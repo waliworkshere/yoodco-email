@@ -101,6 +101,9 @@ export interface OutgoingEmail {
   inReplyTo?: string;
   references?: string[];
   headers?: Record<string, string>;
+  /** Calendar invite (iCalendar text); shown as an invitation with Accept / Decline in Gmail and Outlook */
+  icalEvent?: { method: "REQUEST" | "CANCEL"; content: string };
+  cc?: string;
 }
 
 export type DeliveryRoute = "mailbox" | "sandbox";
@@ -118,6 +121,8 @@ export async function deliver(m: Mailbox, email: OutgoingEmail, route: DeliveryR
       inReplyTo: email.inReplyTo,
       references: email.references,
       headers: email.headers,
+      ...(email.cc ? { cc: email.cc } : {}),
+      ...(email.icalEvent ? { icalEvent: { filename: "invite.ics", method: email.icalEvent.method, content: email.icalEvent.content } } : {}),
     });
   } finally {
     transport.close();

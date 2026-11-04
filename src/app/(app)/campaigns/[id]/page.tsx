@@ -8,6 +8,7 @@ import { IconPause, IconPlay } from "@/components/icons";
 import { CampaignStatusBadge, Flash, ModeBadge } from "@/components/ui";
 import { OverviewTab } from "./OverviewTab";
 import { ContactsTab } from "./ContactsTab";
+import { RepliesTab } from "./RepliesTab";
 import { EmailsTab } from "./EmailsTab";
 import { ActivityTab } from "./ActivityTab";
 import { SettingsTab } from "./SettingsTab";
@@ -26,13 +27,14 @@ const CAMPAIGN_TOUR: TourStep[] = [
   { target: '[data-tour="camp-head"]', title: "One campaign, one sheet", body: "The name, its status (draft, running, paused or completed) and whether it is in test mode or live. Start, pause and other actions are on the right." },
   { target: '[data-tour="test-banner"]', title: "Test mode keeps it safe", body: "While this banner shows, every email is captured and nobody receives anything. A day of waiting lasts one minute, so a whole sequence plays out quickly." },
   { target: ".tour-start", title: "Start the test run", body: "Press this to watch the sequence run: emails go out one by one, follow-ups arrive on schedule, and the numbers update on their own." },
-  { target: '[data-tour="tabs"]', title: "Everything about this campaign", body: "Overview has the results. Contacts shows where each person is in the sequence. Emails is every email sent. Activity is the timeline. Settings has pacing and copy. Test & launch takes you live." },
+  { target: '[data-tour="tabs"]', title: "Everything about this campaign", body: "Overview has the results. Replies shows who answered, what they want and who booked a meeting. Contacts shows where each person is in the sequence. Emails is every email sent. Settings has pacing, copy and how meetings are booked. Test & launch takes you live." },
   { target: '[data-tour="kpis"]', title: "Results per person", body: "How many people were reached and what share of them opened, clicked and replied. Below it you will find the same numbers per email and per mailbox." },
-  { title: "Try acting like a recipient", body: "In the Contacts tab, open Actions on anyone who has been emailed and simulate a reply. Their follow-ups stop, and so do their colleagues' at the same company." },
+  { title: "Try acting like a recipient", body: "In the Contacts tab, open Actions on anyone who has been emailed and simulate an interested reply. Their follow-ups stop, the booking link goes out by itself a few seconds later, and you can open it from the Emails tab to book a time." },
 ];
 
 const TABS = [
   ["overview", "Overview"],
+  ["replies", "Replies"],
   ["contacts", "Contacts"],
   ["emails", "Emails"],
   ["activity", "Activity"],
@@ -46,9 +48,10 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   const tab = TABS.some(([k]) => k === sp.tab) ? sp.tab : "overview";
   const campaign = await db.campaign.findUnique({ where: { id }, include: { steps: { orderBy: { order: "asc" } } } });
   if (!campaign) notFound();
-  const [contactCount, emailCount] = await Promise.all([
+  const [contactCount, emailCount, replyCount] = await Promise.all([
     db.campaignContact.count({ where: { campaignId: id } }),
     db.message.count({ where: { campaignId: id } }),
+    db.campaignContact.count({ where: { campaignId: id, OR: [{ repliedAt: { not: null } }, { meetingBookedAt: { not: null } }] } }),
   ]);
   const isTest = campaign.mode === "TEST";
   const canStart = campaign.status === "DRAFT" || campaign.status === "PAUSED";
@@ -127,12 +130,14 @@ export default async function CampaignPage({ params, searchParams }: { params: P
           <Link key={key} href={`/campaigns/${id}${key === "overview" ? "" : `?tab=${key}`}`} aria-current={tab === key ? "page" : undefined}>
             {label}
             {key === "contacts" ? <span className="count">{contactCount}</span> : null}
+            {key === "replies" && replyCount ? <span className="count">{replyCount}</span> : null}
             {key === "emails" ? <span className="count">{emailCount}</span> : null}
           </Link>
         ))}
       </nav>
 
       {tab === "overview" ? <OverviewTab campaign={campaign} /> : null}
+      {tab === "replies" ? <RepliesTab campaign={campaign} sp={sp} /> : null}
       {tab === "contacts" ? <ContactsTab campaign={campaign} sp={sp} /> : null}
       {tab === "emails" ? <EmailsTab campaign={campaign} sp={sp} /> : null}
       {tab === "activity" ? <ActivityTab campaign={campaign} sp={sp} /> : null}

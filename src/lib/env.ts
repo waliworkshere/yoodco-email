@@ -94,6 +94,14 @@ export const env = {
   get inboxScanMinutes() {
     return Math.max(1, Number(process.env.INBOX_SCAN_MINUTES || 3));
   },
+  /** Secret part of the booking webhook URL (/api/meetings/<key>) for Calendly, Cal.com, Zapier … */
+  get meetingWebhookKey() {
+    return process.env.MEETING_WEBHOOK_KEY || derived("meetings").slice(0, 32) || "";
+  },
+  /** Company name used in meeting titles and the booking page when a mailbox has none. */
+  get companyName() {
+    return process.env.COMPANY_NAME || "";
+  },
   get autoPauseBounceRate() {
     return Number(process.env.AUTO_PAUSE_BOUNCE_RATE || 0.05);
   },
