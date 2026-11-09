@@ -147,6 +147,7 @@ model Campaign {
   meetingTitle         String      @default("Intro call: {{companyName|you}} × {{senderCompany|us}}")
   meetingDurationMin   Int         @default(30)
   meetingLocation      String?     // video link or phone number placed in the invite
+  meetingVideo         String      @default("LINK") // LINK: meetingLocation as is · ZOOM: a new Zoom meeting per booking
   meetingDays          Int[]       @default([1, 2, 3, 4, 5])
   meetingStart         Int         @default(600)  // 10:00 in the campaign time zone
   meetingEnd           Int         @default(1020) // 17:00
@@ -394,10 +395,26 @@ model Meeting {
   endsAt            DateTime?
   hostEmail         String?
   location          String?
+  videoId           String?          // Zoom meeting id, when one was created for this booking
   notes             String?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   @@index([startsAt])
   @@index([createdAt])
+}
+
+/// Connected apps (currently Zoom). Secrets and tokens are encrypted.
+model Integration {
+  id              String    @id @default(cuid())
+  provider        String    @unique // "ZOOM"
+  clientId        String?
+  clientSecretEnc String?
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  accountEmail    String?
+  connectedAt     DateTime?
+  lastError       String?
+  updatedAt       DateTime  @updatedAt
 }

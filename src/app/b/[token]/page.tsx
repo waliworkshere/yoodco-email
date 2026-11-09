@@ -35,7 +35,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const company = companyFromEmail(mailbox?.email);
   const title = fillTemplate(campaign.meetingTitle, varsFor(contact, mailbox, cc.variables)).trim() || "Intro call";
   const initials = sender.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  const where = campaign.meetingLocation ? (/^https?:\/\//.test(campaign.meetingLocation) ? "Video call" : campaign.meetingLocation) : "Details in the invite";
+  const where = campaign.meetingVideo === "ZOOM" ? "Zoom" : campaign.meetingLocation ? (/^https?:\/\//.test(campaign.meetingLocation) ? "Video call" : campaign.meetingLocation) : "Details in the invite";
   const isTest = campaign.mode === "TEST";
 
   let slots: string[] = [];

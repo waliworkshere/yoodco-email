@@ -23,9 +23,12 @@
   process running. Set `CRON_SECRET` in Vercel, then create a free job at cron-job.org (or any scheduler)
   that calls `https://<your-project>.vercel.app/api/cron/tick` every minute with the header
   `Authorization: Bearer <CRON_SECRET>`. Each call sends for about 50 seconds.
-  The repository also includes `.github/workflows/sender.yml`, which does the same every 5 minutes once
-  `APP_URL` and `CRON_SECRET` are added as GitHub Actions secrets (a backup, or enough for small volumes).
-  Each call also reads replies, sends booking links and records meetings.
+  Simplest: the repository's `.github/workflows/sender.yml` keeps one GitHub Actions job running that calls
+  the sender about every minute. It needs no secret: the app accepts GitHub's signed token for that workflow
+  in this repository (set `SENDER_REPO` if you fork it). Each call sends what is due, reads replies every
+  few minutes, sends booking links and records meetings, and returns at once when nothing is due.
+- `PILOT_MODE=true` turns the deployment into a real workspace: each deploy removes the demo login and
+  sample data instead of loading them. Create your own admin first.
   On a regular server, run `npm run worker` instead.
 
 Remove the demo login (Settings → Team) before sending real email.

@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { encrypt } from "@/lib/crypto";
+import { disconnectZoom } from "@/lib/zoom";
 
 const go = (params: Record<string, string>): never => redirect(`/settings?${new URLSearchParams(params)}`);
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -63,4 +65,21 @@ export async function removeSuppression(form: FormData) {
   const id = str(form, "id");
   await db.contact.update({ where: { id }, data: { unsubscribedAt: null, bouncedAt: null } });
   go({ notice: "Removed from the do-not-email list." });
+}
+
+/** Saves the Zoom app's credentials (created once in the Zoom App Marketplace). */
+export async function saveZoomApp(form: FormData) {
+  await requireAdmin();
+  const clientId = String(form.get("clientId") ?? "").trim();
+  const clientSecret = String(form.get("clientSecret") ?? "").trim();
+  if (!clientId || !clientSecret) redirect(`/settings?error=${encodeURIComponent("Paste both the Client ID and the Client secret.")}#integrations`);
+  const data = { clientId, clientSecretEnc: encrypt(clientSecret) };
+  await db.integration.upsert({ where: { provider: "ZOOM" }, create: { provider: "ZOOM", ...data }, update: data });
+  redirect(`/settings?notice=${encodeURIComponent("Zoom app saved. Now press Connect Zoom.")}#integrations`);
+}
+
+export async function removeZoom() {
+  await requireAdmin();
+  await disconnectZoom();
+  redirect(`/settings?notice=${encodeURIComponent("Zoom disconnected. Meetings use the fixed link again.")}#integrations`);
 }

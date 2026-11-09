@@ -2,6 +2,7 @@ import { db } from "../db";
 import { env } from "../env";
 import { tick, type TickReport } from "./scheduler";
 import { scanInboxes } from "./inbox";
+import { isInWindow } from "../schedule";
 
 /**
  * Shared by the long-running worker (`npm run worker`) and the serverless
@@ -35,13 +36,31 @@ export interface CycleResult {
   skipped?: string;
 }
 
-/** Runs scheduler ticks for up to `budgetMs`, then returns. Scans inboxes once. */
+/** Reads replies at most every few minutes, however often the sender is called. */
+async function scanInboxesIfDue(everyMs = 3 * 60_000) {
+  const now = new Date();
+  const last = await db.workerHeartbeat.findUnique({ where: { id: "inbox" } });
+  if (last && now.getTime() - last.lastBeat.getTime() < everyMs) return { skipped: "Read recently" };
+  await db.workerHeartbeat.upsert({ where: { id: "inbox" }, create: { id: "inbox", lastBeat: now, startedAt: now, host: "inbox" }, update: { lastBeat: now } });
+  return scanInboxes();
+}
+
+/** Is there anything to send in the next `withinMs`: a campaign inside its sending window, or a booking link due? */
+async function workAhead(withinMs: number) {
+  const now = new Date();
+  const running = await db.campaign.findMany({ where: { status: "RUNNING" } });
+  if (running.some((c) => (c.mode === "TEST" && c.testFastForward) || isInWindow(now, c))) return true;
+  const due = await db.campaignContact.count({ where: { bookingReplySentAt: null, bookingReplyDueAt: { lte: new Date(now.getTime() + withinMs) } } });
+  return due > 0;
+}
+
+/** Runs scheduler ticks for up to `budgetMs`, then returns. Reads inboxes when due. */
 export async function runFor(instance: string, budgetMs: number, tickMs: number): Promise<CycleResult> {
   const startedAt = new Date();
   const out: CycleResult = { ticks: 0, sent: 0, failed: 0, reports: [] };
   if (!(await claimLeadership(instance, startedAt))) return { ...out, skipped: "Another sender is running" };
   try {
-    out.inbox = await scanInboxes();
+    out.inbox = await scanInboxesIfDue();
     while (Date.now() - startedAt.getTime() < budgetMs) {
       const began = Date.now();
       if (!(await claimLeadership(instance, startedAt, { sent: out.sent, failed: out.failed, ticks: out.ticks }))) break;
@@ -52,9 +71,7 @@ export async function runFor(instance: string, budgetMs: number, tickMs: number)
         if (r.action === "failed") out.failed++;
         if (r.action !== "waiting") out.reports.push(r);
       }
-      const running = await db.campaign.count({ where: { status: "RUNNING" } });
-      const soon = await db.campaignContact.count({ where: { bookingReplySentAt: null, bookingReplyDueAt: { lte: new Date(startedAt.getTime() + budgetMs) } } });
-      if (!running && !soon) break;
+      if (!(await workAhead(budgetMs))) break;
       const wait = Math.max(300, tickMs - (Date.now() - began));
       if (Date.now() - startedAt.getTime() + wait >= budgetMs) break;
       await new Promise((r) => setTimeout(r, wait));

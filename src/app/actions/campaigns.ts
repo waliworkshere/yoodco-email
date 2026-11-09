@@ -9,7 +9,7 @@ import { composeStep, messageIdFor } from "@/lib/engine/send";
 import { applyBounce, applyReply } from "@/lib/engine/outcomes";
 import { deliver } from "@/lib/mail/transport";
 import { randomToken } from "@/lib/crypto";
-import { availabilityFor, busyFor, hostFor, recordMeeting, sendInvite } from "@/lib/meetings/record";
+import { attachVideo, availabilityFor, busyFor, hostFor, recordMeeting, sendInvite } from "@/lib/meetings/record";
 import { availableSlots } from "@/lib/meetings/slots";
 import { isValidTimezone } from "@/lib/meetings/time";
 
@@ -296,6 +296,7 @@ export async function updateCampaignSettings(form: FormData) {
         meetingTitle: str(form, "meetingTitle") || undefined,
         meetingDurationMin: int(form, "meetingDurationMin", 30, 10, 240),
         meetingLocation: str(form, "meetingLocation") || null,
+        meetingVideo: str(form, "meetingVideo") === "ZOOM" ? "ZOOM" : "LINK",
         meetingDays: form.getAll("meetingDays").map(Number).filter((n) => n >= 0 && n <= 6),
         meetingStart: hhmmToMinutes(str(form, "meetingStart"), 600),
         meetingEnd: hhmmToMinutes(str(form, "meetingEnd"), 1020),
@@ -405,8 +406,8 @@ export async function simulate(form: FormData) {
   if (what === "meeting") {
     const cc2 = await db.campaignContact.findUniqueOrThrow({ where: { id: ccId }, include: { contact: true, campaign: true, mailbox: true } });
     const slot = availableSlots(availabilityFor(cc2.campaign), await busyFor(hostFor(cc2.campaign, cc2.mailbox)), now)[0] ?? new Date(now.getTime() + 2 * 86_400_000);
-    const { meeting } = await recordMeeting({ source: "BOOKING_PAGE", email: cc2.contact.email, startsAt: slot, location: cc2.campaign.meetingLocation, enrollment: cc2 });
-    await sendInvite(meeting, cc2).catch(() => undefined);
+    const { meeting } = await recordMeeting({ source: "BOOKING_PAGE", email: cc2.contact.email, startsAt: slot, location: cc2.campaign.meetingVideo === "ZOOM" ? null : cc2.campaign.meetingLocation, enrollment: cc2 });
+    await sendInvite(await attachVideo(meeting, cc2), cc2).catch(() => undefined);
   }
   if (what === "bounce") await applyBounce(m, "Simulated bounce: 550 5.1.1 mailbox does not exist");
   if (what === "open" || what === "click") {

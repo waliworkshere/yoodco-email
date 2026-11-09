@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { requireUser } from "@/lib/auth";
 import { workerStatus } from "@/lib/stats";
-import { addSuppression, addUser, changePassword, removeSuppression, removeUser } from "@/app/actions/settings";
+import { addSuppression, addUser, changePassword, removeSuppression, removeUser, removeZoom, saveZoomApp } from "@/app/actions/settings";
+import { zoomRedirectUri, zoomSettings } from "@/lib/zoom";
 import { ConfirmButton, SubmitButton } from "@/components/buttons";
 import { Badge, Flash, fmtDate, fmtNum, fmtRelative } from "@/components/ui";
 
@@ -19,6 +20,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ]);
   const isAdmin = me.role === "ADMIN";
 
+  const zoom = await zoomSettings();
   const webhook = env.meetingWebhookKey ? `${env.appUrl}/api/meetings/${env.meetingWebhookKey}` : "";
   return (
     <>
@@ -37,6 +39,42 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <dt>Reading replies</dt><dd>{process.env.ANTHROPIC_API_KEY ? <Badge tone="good">AI</Badge> : <Badge>Built-in rules</Badge>} <span className="muted small">{process.env.ANTHROPIC_API_KEY ? "Replies are read by an AI model, with the rules as a fallback." : "Add ANTHROPIC_API_KEY to have replies read by AI."}</span></dd>
             <dt>Live sending schedule</dt><dd>{process.env.CRON_SECRET ? <Badge tone="good">Ready</Badge> : <Badge tone="warn">CRON_SECRET not set</Badge>} <span className="muted small">A scheduler calls {env.appUrl}/api/cron/tick every minute (see docs/DEPLOY_VERCEL.md).</span></dd>
           </dl>
+        </div>
+      </section>
+
+      <section className="card" id="integrations">
+        <div className="card-head"><h2>Zoom</h2><p>A new Zoom meeting for every booked call, added to the calendar invite.</p></div>
+        <div className="card-body stack" style={{ gap: 14 }}>
+          {zoom.connected ? (
+            <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+              <Badge tone="good">Connected</Badge>
+              <span>Meetings are created in <b>{zoom.row?.accountEmail ?? "the connected Zoom account"}</b>.</span>
+              {zoom.row?.lastError ? <span className="small" style={{ color: "var(--red)" }}>{zoom.row.lastError}</span> : null}
+              <form action={removeZoom} style={{ marginLeft: "auto" }}><SubmitButton className="btn btn-sm" pending="…">Disconnect</SubmitButton></form>
+            </div>
+          ) : zoom.appReady ? (
+            <div className="row" style={{ gap: 12 }}>
+              <a className="btn btn-primary" href="/api/oauth/zoom/start">Connect Zoom</a>
+              <span className="small muted">Sign in with the Zoom account that should host the meetings.</span>
+            </div>
+          ) : null}
+          {!zoom.fromEnv ? (
+            <details open={!zoom.appReady}>
+              <summary className="small">{zoom.appReady ? "Zoom app details" : "Set up once (about 5 minutes)"}</summary>
+              <ol className="small stack" style={{ gap: 6, paddingLeft: 18, margin: "10px 0" }}>
+                <li>Go to marketplace.zoom.us → Develop → Build App → <b>General App</b>, signed in with the company Zoom account.</li>
+                <li>Under OAuth, set the redirect URL and the allow list to: <code className="mono">{zoomRedirectUri()}</code></li>
+                <li>Under Scopes, add <code>meeting:write:meeting</code>, <code>meeting:delete:meeting</code>, <code>meeting:update:meeting</code> and <code>user:read:user</code>.</li>
+                <li>Copy the Client ID and Client secret here, save, then press Connect Zoom.</li>
+              </ol>
+              <form action={saveZoomApp} className="fields">
+                <div className="field"><label htmlFor="zid">Client ID</label><input id="zid" name="clientId" className="input" defaultValue={zoom.row?.clientId ?? ""} autoComplete="off" /></div>
+                <div className="field"><label htmlFor="zsec">Client secret</label><input id="zsec" name="clientSecret" type="password" className="input" placeholder={zoom.row?.clientSecretEnc ? "Saved (paste to replace)" : ""} autoComplete="off" /></div>
+                <div><SubmitButton className="btn" pending="Saving…">Save Zoom app</SubmitButton></div>
+              </form>
+            </details>
+          ) : null}
+          <p className="small muted">Then choose &quot;Zoom&quot; under Meetings → Video in each campaign&apos;s settings. Test runs don&apos;t create real Zoom meetings.</p>
         </div>
       </section>
 

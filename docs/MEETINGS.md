@@ -65,3 +65,11 @@ Test-run bookings are kept separately and never counted.
 Start a test run, then on the **Contacts** tab use *Actions → Simulate → An interested reply*. A few seconds
 later the booking-link email appears on the **Emails** tab. Open the link (the address is in the email) to book
 a time; the meeting appears on the **Replies** tab and under **Meetings → Test bookings**.
+
+## Zoom
+
+Settings → **Zoom**: create a Zoom "General app" once (the page lists the redirect URL and scopes to use),
+save its Client ID and secret, then press **Connect Zoom**. In a campaign's Settings → Meetings, set
+**Video** to *Zoom*: every booking on the built-in page then gets its own Zoom meeting, created in the
+connected account and placed in the calendar invite. Moving or canceling the booking deletes the old
+Zoom meeting. Test runs show a placeholder instead of creating real Zoom meetings.

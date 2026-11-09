@@ -1,32 +1,41 @@
 # Keeps live campaigns sending on hosts without a background worker (e.g. Vercel Hobby).
-# Every 5 minutes it calls /api/cron/tick, which sends for ~50 seconds, reads replies,
-# sends booking links and records meetings.
+# One job stays on for ~5h45m and calls /api/cron/tick about every minute; the schedule
+# starts the next job so there is always one running. Each call sends what is due, reads
+# replies, sends booking links and records meetings.
 #
-# Setup: repository Settings → Secrets and variables → Actions → add
-#   APP_URL      https://yoodco-email.vercel.app
-#   CRON_SECRET  the same value as CRON_SECRET in Vercel → Settings → Environment Variables
-#
-# GitHub runs scheduled jobs "at best every 5 minutes" and sometimes later. For full speed
-# (20 an hour), also add a free every-minute job at cron-job.org calling the same address.
+# No secrets needed: the app checks a GitHub-signed token proving the call comes from this
+# workflow in this repository. Set the repository variable APP_URL to use another address.
 name: Sender
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/20 * * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/sender.yml"]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: sender
+  cancel-in-progress: false
 
 jobs:
-  tick:
+  send:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 355
     steps:
-      - name: Run the sender for a minute
+      - name: Keep the sender running
         env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://yoodco-email.vercel.app' }}
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "APP_URL or CRON_SECRET is not set in the repository secrets; nothing to do."
-            exit 0
-          fi
-          curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/tick" | head -c 2000
+          end=$((SECONDS + 345 * 60))
+          while [ $SECONDS -lt $end ]; do
+            token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=yood-outreach" | jq -r .value)
+            out=$(curl -sS --max-time 75 -H "Authorization: Bearer $token" "$APP_URL/api/cron/tick" || echo '{"ok":false,"error":"request failed"}')
+            echo "$(date -u +%H:%M:%S) $(echo "$out" | jq -c '{ok, sent, failed, ticks, skipped, error}' 2>/dev/null || echo "$out" | head -c 200)"
+            sleep 20
+          done

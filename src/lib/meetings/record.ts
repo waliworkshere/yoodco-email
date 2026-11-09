@@ -6,6 +6,7 @@ import { fillTemplate } from "../render";
 import { deliver } from "../mail/transport";
 import { messageIdFor, varsFor } from "../engine/send";
 import { buildInvite } from "./ics";
+import { createZoomMeeting, deleteZoomMeeting, zoomSettings } from "../zoom";
 import type { Availability, Busy } from "./slots";
 
 /**
@@ -119,6 +120,7 @@ export async function recordMeeting(input: MeetingInput): Promise<{ meeting: Mee
 
 export async function cancelMeeting(meeting: Meeting, reason = "Canceled") {
   if (meeting.status === "CANCELED") return meeting;
+  if (meeting.videoId) await deleteZoomMeeting(meeting.videoId).catch(() => undefined);
   const updated = await db.meeting.update({ where: { id: meeting.id }, data: { status: "CANCELED", notes: [meeting.notes, reason].filter(Boolean).join(" · ") } });
   if (meeting.campaignContactId) {
     const others = await db.meeting.count({ where: { campaignContactId: meeting.campaignContactId, status: { in: ["BOOKED", "HELD"] }, id: { not: meeting.id } } });
@@ -161,7 +163,7 @@ export async function sendInvite(meeting: Meeting, cc: Enrollment, method: "REQU
   const host = hostFor(campaign, mailbox);
   const attendees = [{ name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || null, email: contact.email }];
   if (host && host !== mailbox.email.toLowerCase()) attendees.push({ name: null, email: host });
-  const location = campaign.meetingLocation ? fillTemplate(campaign.meetingLocation, vars) : null;
+  const location = meeting.location || (campaign.meetingLocation ? fillTemplate(campaign.meetingLocation, vars) : null);
   const description = [
     `Booked by ${contact.email}${contact.company ? ` (${contact.company})` : ""}.`,
     location ? `Join: ${location}` : "",
@@ -228,4 +230,30 @@ export async function sendInvite(meeting: Meeting, cc: Enrollment, method: "REQU
       links: [],
     },
   });
+}
+
+/**
+ * Gives a meeting booked on our page its video link: a fresh Zoom meeting when the campaign uses Zoom
+ * and Zoom is connected (live campaigns only), otherwise the campaign's fixed link.
+ */
+export async function attachVideo(meeting: Meeting, cc: Enrollment): Promise<Meeting> {
+  const c = cc.campaign;
+  if (c.meetingVideo !== "ZOOM" || !meeting.startsAt) return meeting;
+  if (c.mode === "TEST") return db.meeting.update({ where: { id: meeting.id }, data: { location: "Zoom link (created for live bookings)" } });
+  const z = await zoomSettings();
+  if (!z.connected) return meeting;
+  try {
+    const title = fillTemplate(c.meetingTitle, varsFor(cc.contact, cc.mailbox, cc.variables)).trim() || "Intro call";
+    const zm = await createZoomMeeting({
+      topic: title,
+      start: meeting.startsAt,
+      durationMin: c.meetingDurationMin,
+      timezone: c.timezone,
+      agenda: `Booked by ${cc.contact.email}${cc.contact.company ? ` (${cc.contact.company})` : ""} via Yood Outreach.`,
+    });
+    return db.meeting.update({ where: { id: meeting.id }, data: { location: zm.joinUrl, videoId: zm.id } });
+  } catch (err) {
+    await db.meeting.update({ where: { id: meeting.id }, data: { notes: [meeting.notes, `Zoom: ${(err as Error).message}`].filter(Boolean).join(" · ") } });
+    return meeting;
+  }
 }

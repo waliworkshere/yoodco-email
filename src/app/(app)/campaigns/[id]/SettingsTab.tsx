@@ -35,6 +35,14 @@ export function SettingsTab({ campaign: c }: { campaign: Campaign & { steps: Cam
               <span className="hint">Gets the calendar invite too, e.g. lionel@yood.co.</span>
             </div>
             <div className="field">
+              <label htmlFor="meetingVideo">Video</label>
+              <select id="meetingVideo" name="meetingVideo" className="input" defaultValue={c.meetingVideo}>
+                <option value="LINK">The link below</option>
+                <option value="ZOOM">Zoom: a new meeting for each booking</option>
+              </select>
+              <span className="hint">Connect Zoom in Settings first.</span>
+            </div>
+            <div className="field">
               <label htmlFor="meetingLocation">Video link or phone</label>
               <input id="meetingLocation" name="meetingLocation" className="input" defaultValue={c.meetingLocation ?? ""} placeholder="https://meet.google.com/abc-defg-hij" />
             </div>

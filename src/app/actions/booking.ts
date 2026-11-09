@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { fillTemplate } from "@/lib/render";
 import { varsFor } from "@/lib/engine/send";
 import { resolveBooking } from "@/lib/meetings/booking";
-import { availabilityFor, busyFor, cancelMeeting, hostFor, recordMeeting, sendInvite } from "@/lib/meetings/record";
+import { attachVideo, availabilityFor, busyFor, cancelMeeting, hostFor, recordMeeting, sendInvite } from "@/lib/meetings/record";
 import { isSlotAvailable } from "@/lib/meetings/slots";
 
 /** Public: a contact picks a time on the booking page. No sign-in; the link itself is the key. */
@@ -30,12 +30,13 @@ export async function bookSlot(form: FormData) {
     title: title || "Intro call",
     startsAt: slot,
     hostEmail: host,
-    location: cc.campaign.meetingLocation,
+    location: cc.campaign.meetingVideo === "ZOOM" ? null : cc.campaign.meetingLocation,
     enrollment: cc,
   });
+  const withVideo = await attachVideo(meeting, cc);
   let invite = "sent";
   try {
-    await sendInvite(meeting, cc);
+    await sendInvite(withVideo, cc);
   } catch {
     invite = "failed";
   }
