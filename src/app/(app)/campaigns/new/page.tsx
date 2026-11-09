@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { createCampaign } from "@/app/actions/campaigns";
 import { SubmitButton } from "@/components/buttons";
 import { Flash, Notice } from "@/components/ui";
@@ -56,7 +57,7 @@ export default async function NewCampaign({ searchParams }: { searchParams: Prom
             </div>
             <div className="field">
               <label htmlFor="timezone">Sending time zone</label>
-              <input id="timezone" name="timezone" className="input" defaultValue="Asia/Dubai" />
+              <input id="timezone" name="timezone" className="input" defaultValue={env.displayTimezone} />
               <span className="hint">Weekdays 09:00–17:00 in this zone. Adjustable later.</span>
             </div>
             <div className="field span-2">
