@@ -37,7 +37,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <dt>Google sign-in</dt><dd>{env.google.oauthConfigured ? <Badge tone="good">Set up</Badge> : <Badge>Not set up</Badge>} {env.google.dwdConfigured ? <Badge tone="good">Workspace admin set up</Badge> : null}</dd>
             <dt>Microsoft sign-in</dt><dd>{env.microsoft.configured ? <Badge tone="good">Set up</Badge> : <Badge>Not set up</Badge>}</dd>
             <dt>Reading replies</dt><dd>{process.env.ANTHROPIC_API_KEY ? <Badge tone="good">AI</Badge> : <Badge>Built-in rules</Badge>} <span className="muted small">{process.env.ANTHROPIC_API_KEY ? "Replies are read by an AI model, with the rules as a fallback." : "Add ANTHROPIC_API_KEY to have replies read by AI."}</span></dd>
-            <dt>Live sending schedule</dt><dd>{process.env.CRON_SECRET ? <Badge tone="good">Ready</Badge> : <Badge tone="warn">CRON_SECRET not set</Badge>} <span className="muted small">A scheduler calls {env.appUrl}/api/cron/tick every minute (see docs/DEPLOY_VERCEL.md).</span></dd>
+            <dt>Live sending schedule</dt><dd><Badge tone="good">GitHub Actions</Badge> <span className="muted small">The repository&apos;s Sender workflow calls the sender about every minute{process.env.CRON_SECRET ? "; other schedulers can use CRON_SECRET" : ""}. The heartbeat above shows it is working.</span></dd>
           </dl>
         </div>
       </section>
